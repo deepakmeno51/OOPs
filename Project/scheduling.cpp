@@ -1,58 +1,105 @@
-#include <iostream> // For input/output operations (e.g., cout, cin)
-#include <fstream> // For file input/output operations (e.g., reading from and writing to files)
-#include <vector>  // For using the vector container (dynamic array) to store bookings
-#include <string>  // For using the string class to represent text data
-#include <algorithm> // For using std::remove_if, a useful algorithm
-#include <sstream>   // For using stringstream
-#include <utility>   // For using std::pair
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <sstream>
+#include <utility>
+#include <ctime>
+#include <iomanip> // For formatting output
 
-using namespace std; // Avoids repeatedly writing std:: before standard library elements
+
+
+//Explanation of the libraries used in the making of the scheduling system 
+// <iostream> -> std in and out operations
+// <fstream> -> used in file managing and file reading which is required when a session is booked
+// <vector> -> to allow the usage of dynamic arrays where we can store data of the same data type
+// <string> -> used to represent string 
+// <algorithms> -> Contains a large collection of generic algorithms that operate on containers (like vector). These algorithms perform common operations without you having to write the code yourself.
+
+
+using namespace std;
 
 class StudioScheduler {
 private:
-    // Nested struct to represent a booking
     struct Booking {
-        string artist; // Name of the artist
-        string date;   // Date of the booking (e.g., "2025-02-12")
-        string time;   // Time slot of the booking (e.g., "10:00 AM - 12:00 PM")
+        string artist;
+        string date;
+        string time;
+        double price;
     };
 
-    vector<Booking> bookings; // A vector to store multiple Booking objects (the bookings)
-    const string filename = "bookings.txt";  // The name of the file to store bookings persistently
+    vector<Booking> bookings;
+    const string filename = "bookings.txt";
 
-    // Helper function to save the booking data to a file
+    // Helper method to determine if a date is a weekend
+    bool isWeekend(const string& date) {
+        // Use a simplified approach, avoiding get_time and tm structs if possible
+        // This assumes dates are always in YYYY-MM-DD format, and only checks if the day is Saturday or Sunday
+        if (date.length() != 10 || date[4] != '-' || date[7] != '-') {
+            return false; // Invalid date format
+        }
+
+        int year, month, day;
+        sscanf(date.c_str(), "%d-%d-%d", &year, &month, &day);
+
+        // Zeller's congruence to calculate the day of the week
+        //  0 = Saturday, 1 = Sunday, ..., 6 = Friday
+
+        if (month < 3) {
+            month += 12;
+            year--;
+        }
+        int dayOfWeek = (day + 2 * month + 3 * (month + 1) / 5 + year + year / 4 - year / 100 + year / 400 + 2) % 7;
+
+
+        return (dayOfWeek == 0 || dayOfWeek == 1); // 0 is Saturday, 1 is Sunday
+    }
+
+    // Helper to calculate hours from time string
+    double getHoursFromTime(const string& time) {
+        size_t dash = time.find(" - ");
+        if (dash == string::npos) return 0.0;
+        string start = time.substr(0, dash);
+        string end = time.substr(dash + 3);
+
+        int startHour, startMinute, endHour, endMinute;
+        sscanf(start.c_str(), "%d:%d", &startHour, &startMinute);
+        sscanf(end.c_str(), "%d:%d", &endHour, &endMinute);
+
+        double duration = (endHour - startHour) + (endMinute - startMinute) / 60.0;
+        return duration;
+    }
+
     void saveToFile() {
-        ofstream file(filename); // Open the file for writing (creates it if it doesn't exist, overwrites if it does)
-        if (file.is_open()) { // Check if the file was opened successfully
-            for (const auto& booking : bookings) { // Iterate through each booking in the bookings vector
-                file << booking.artist << "," << booking.date << "," << booking.time << endl; // Write the artist, date, and time to the file, separated by commas, and a newline at the end
+        ofstream file(filename);
+        if (file.is_open()) {
+            for (const auto& booking : bookings) {
+                file << booking.artist << "," << booking.date << "," << booking.time << "," << fixed << setprecision(2) << booking.price << endl;
             }
-            file.close(); // Close the file to ensure data is written and resources are released
+            file.close();
         }
     }
 
-    // Helper function to load booking data from a file
     void loadFromFile() {
-        ifstream file(filename); // Open the file for reading
-        if (file.is_open()) { // Check if the file opened successfully
-            bookings.clear(); // Clear the bookings vector to remove any existing bookings before loading
-            string line; // Holds a line of the file
-            while (getline(file, line)) {  // Read the file line by line, reading entire lines, and store each line in the 'line' string
-                size_t pos1 = line.find(',');   // Find the position of the first comma (separates artist and date)
-                size_t pos2 = line.find(',', pos1 + 1); // Find the position of the second comma (separates date and time), starting the search after the first comma
-                if (pos1 != string::npos && pos2 != string::npos) { // Check if both commas were found (valid format)
-                    string artist = line.substr(0, pos1);              // Extract the artist name (from the beginning to the first comma)
-                    string date = line.substr(pos1 + 1, pos2 - pos1 - 1); // Extract the date (from after the first comma to the second comma)
-                    string time = line.substr(pos2 + 1);              // Extract the time (from after the second comma to the end of the line)
-                    bookings.push_back({artist, date, time}); // Create a Booking object with the extracted data and add it to the bookings vector
+        ifstream file(filename);
+        if (file.is_open()) {
+            bookings.clear();
+            string line;
+            while (getline(file, line)) {
+                size_t pos1 = line.find(','), pos2 = line.find(',', pos1 + 1), pos3 = line.find(',', pos2 + 1);
+                if (pos1 != string::npos && pos2 != string::npos && pos3 != string::npos) {
+                    string artist = line.substr(0, pos1);
+                    string date = line.substr(pos1 + 1, pos2 - pos1 - 1);
+                    string time = line.substr(pos2 + 1, pos3 - pos2 - 1);
+                    double price = stod(line.substr(pos3 + 1));
+                    bookings.push_back({artist, date, time, price});
                 }
             }
-            file.close(); // Close the file
+            file.close();
         }
     }
 
-
-    // Helper function to extract time range from string
     pair<int, int> extractTimeRange(const string& timeSlot) {
         int startHour = -1;
         int endHour = -1;
@@ -65,8 +112,8 @@ private:
         }
 
         if (tokens.size() >= 4) {
-            string startTime = tokens[0]; // e.g., "10:00"
-            string endTime = tokens[2];   // e.g., "12:00"
+            string startTime = tokens[0];
+            string endTime = tokens[2];
 
             size_t colonPos1 = startTime.find(':');
             if (colonPos1 != string::npos) {
@@ -81,111 +128,99 @@ private:
         return make_pair(startHour, endHour);
     }
 
-    // Helper function to find the next available slot
+
     pair<string, string> findNextAvailableSlot(const string& requestedDate, const string& requestedTime) {
-        //Simple implementation: return the next hour slot on the same day if available
         pair<string, string> nextSlot = make_pair("", "");
         auto requestedTimeRange = extractTimeRange(requestedTime);
         int requestedStartHour = requestedTimeRange.first;
         int requestedEndHour = requestedTimeRange.second;
 
         if (requestedStartHour == -1 || requestedEndHour == -1) {
-            return nextSlot; // Return empty pair if the time format is invalid
+            return nextSlot;
         }
 
-
-        // Increment the start time by 1 hour (assuming that's what makes a next available time slot)
         int nextStartHour = requestedEndHour;
         int nextEndHour = requestedEndHour + 2;
 
-        // Create the next available time string
         string nextStartTime = to_string(nextStartHour) + ":00";
         string nextEndTime = to_string(nextEndHour) + ":00";
         string nextTimeSlot = nextStartTime + " - " + nextEndTime;
 
-
-        //Check if the next time slot is free on same date
         if(isAvailable(requestedDate, nextTimeSlot)){
             nextSlot = make_pair(requestedDate, nextTimeSlot);
         }
 
         return nextSlot;
-
     }
+
 
 
 public:
-    // Constructor: Called when a StudioScheduler object is created
     StudioScheduler() {
-        loadFromFile();  // Load bookings from the file when the scheduler is created (so bookings persist between runs)
+        loadFromFile();
     }
 
-    // Function to check if a given time slot is available (not already booked)
-    bool isAvailable(const string& date, const string& time) const { //Added const to the function signature, added const to the string&
-        for (const auto& booking : bookings) { // Iterate through all existing bookings
-            if (booking.date == date && booking.time == time) { // Check if the date and time match an existing booking
-                return false;  // If a match is found, the time slot is already booked, so return false
+    bool isAvailable(const string& date, const string& time) const {
+        for (const auto& booking : bookings) {
+            if (booking.date == date && booking.time == time) {
+                return false;
             }
         }
-        return true; // If no match is found, the time slot is available, so return true]
+        return true;
     }
 
     void bookSession(const string& artist, const string& date, const string& time) {
-        if (isAvailable(date, time)) { // Check if the requested time slot is available
-            bookings.push_back({artist, date, time}); // If available, add the new booking to the vector
-            saveToFile();  // Save the updated bookings to a file
-            cout << "Booking confirmed for " << artist << " on " << date << " at " << time << endl; // Print confirmation message
+        double rate = isWeekend(date) ? 15.0 : 10.0;
+        double hours = getHoursFromTime(time);
+        double price = hours * rate;
 
-            // Display all booked slots for the artist
+        if (isAvailable(date, time)) {
+            bookings.push_back({artist, date, time, price});
+            saveToFile();
+            cout << "Booking confirmed for " << artist << " on " << date << " at " << time << ". Total Cost: $" << fixed << setprecision(2) << price << endl;
+
             cout << "Already booked slots for " << artist << ":" << endl;
             for (const auto& booking : bookings) {
-                if (booking.artist == artist) { // Check if the booking belongs to the current artist
-                    cout << booking.date << " at " << booking.time << endl; // Print each booking for the artist
+                if (booking.artist == artist) {
+                    cout << booking.date << " at " << booking.time << " - Cost: $" << fixed << setprecision(2) << booking.price << endl;
                 }
             }
         } else {
-            cout << "Error: Time slot already booked!" << endl; // Inform user if slot is not available
+            cout << "Error: Time slot already booked!" << endl;
 
-            // Suggest next available slot
-            auto nextSlot = findNextAvailableSlot(date, time); // Find the next available slot
-            if(!nextSlot.first.empty()){
-              cout << "Next available slot is on " << nextSlot.first << " at " << nextSlot.second << endl; // Show the next available time
+            auto nextSlot = findNextAvailableSlot(date, time);
+            if (!nextSlot.first.empty()) {
+                cout << "Next available slot is on " << nextSlot.first << " at " << nextSlot.second << endl;
             } else {
-              cout << "No other slots available" << endl;
+                cout << "No other slots available" << endl;
             }
         }
     }
 
-    // Function to cancel a booking
-    void cancelSession(const string& artist, const string& date, const string& time) { // Added const to the function signature, added const to the string&
-        // Use std::remove_if to efficiently remove the booking matching the artist, date, and time.
-
-        // remove_if iterates through the bookings vector and moves all the elements that do NOT match the condition to the beginning.
-        // It returns an iterator to the beginning of the "removed" section of the vector
-        auto it = remove_if(bookings.begin(), bookings.end(),
-                           [&](const Booking& booking) { // Lambda function to define the removal condition.  [&] captures variables from the enclosing scope by reference.
-                               return booking.artist == artist && booking.date == date && booking.time == time; // The lambda returns true if the booking should be removed.
+    void cancelSession(const string& artist, const string& date, const string& time) {
+         auto it = remove_if(bookings.begin(), bookings.end(),
+                           [&](const Booking& booking) {
+                               return booking.artist == artist && booking.date == date && booking.time == time;
                            });
 
         if (it != bookings.end()) {
-            bookings.erase(it, bookings.end());  // Erase the elements marked for removal (from 'it' to the end of the vector)
-            saveToFile();  // Save the updated bookings to the file
-            cout << "Session canceled for " << artist << " on " << date << " at " << time << endl; // Print confirmation message
+            bookings.erase(it, bookings.end());
+            saveToFile();
+            cout << "Session canceled for " << artist << " on " << date << " at " << time << endl;
         } else {
-            cout << "Error: No matching booking found!" << endl; // Print an error message if no matching booking was found
+            cout << "Error: No matching booking found!" << endl;
         }
     }
 
-    // Function to list all current bookings
-    void listBookings() const { // Added const to the function signature
-        if (bookings.empty()) { // Check if the bookings vector is empty
-            cout << "No bookings available." << endl; // If empty, print a message indicating no bookings
-            return; // Exit the function
+    void listBookings() const {
+        if (bookings.empty()) {
+            cout << "No bookings available." << endl;
+            return;
         }
 
-        cout << "\nCurrent Studio Bookings:\n"; // Print a header for the list of bookings
-        for (const auto& booking : bookings) { // Iterate through each booking in the bookings vector
-            cout << "Artist: " << booking.artist << " | Date: " << booking.date << " | Time: " << booking.time << endl; // Print the booking details
+        cout << "\nCurrent Studio Bookings:\n";
+        for (const auto& booking : bookings) {
+            cout << "Artist: " << booking.artist << " | Date: " << booking.date << " | Time: " << booking.time << " | Cost: $" << fixed << setprecision(2) << booking.price << endl;
         }
     }
 };
@@ -220,32 +255,32 @@ void getBookingDetails(string& artist, string& date, string& time) {
 
 // Main function (program entry point)
 int main() {
-    StudioScheduler scheduler; // Create an instance of the StudioScheduler class (this loads any existing bookings from file)
+    StudioScheduler scheduler;
     int choice;
     string artist, date, time;
 
     do {
-        choice = displayMenu(); // Display the menu and get the user's choice
+        choice = displayMenu();
 
         switch (choice) {
-            case 1: // Book a Session
+            case 1:
                 getBookingDetails(artist, date, time);
                 scheduler.bookSession(artist, date, time);
                 break;
-            case 2: // Cancel a Session
+            case 2:
                 getBookingDetails(artist, date, time);
                 scheduler.cancelSession(artist, date, time);
                 break;
-            case 3: // List Bookings
+            case 3:
                 scheduler.listBookings();
                 break;
-            case 4: // Exit
+            case 4:
                 cout << "Exiting Studio Booking System. Goodbye!" << endl;
                 break;
-            default: // Invalid choice
+            default:
                 cout << "Invalid choice. Please try again." << endl;
         }
-    } while (choice != 4); // Continue looping until the user chooses to exit (option 4)
+    } while (choice != 4);
 
-    return 0; // Indicates successful program execution
+    return 0;
 }
