@@ -3,6 +3,8 @@
 #include <vector>  // For using the vector container (dynamic array) to store bookings
 #include <string>  // For using the string class to represent text data
 #include <algorithm> // For using std::remove_if, a useful algorithm
+#include <sstream>   // For using stringstream
+#include <utility>   // For using std::pair
 
 using namespace std; // Avoids repeatedly writing std:: before standard library elements
 
@@ -49,6 +51,69 @@ private:
         }
     }
 
+
+    // Helper function to extract time range from string
+    pair<int, int> extractTimeRange(const string& timeSlot) {
+        int startHour = -1;
+        int endHour = -1;
+        stringstream ss(timeSlot);
+        string token;
+        vector<string> tokens;
+
+        while (getline(ss, token, ' ')) {
+            tokens.push_back(token);
+        }
+
+        if (tokens.size() >= 4) {
+            string startTime = tokens[0]; // e.g., "10:00"
+            string endTime = tokens[2];   // e.g., "12:00"
+
+            size_t colonPos1 = startTime.find(':');
+            if (colonPos1 != string::npos) {
+                startHour = stoi(startTime.substr(0, colonPos1));
+            }
+
+            size_t colonPos2 = endTime.find(':');
+            if (colonPos2 != string::npos) {
+                endHour = stoi(endTime.substr(0, colonPos2));
+            }
+        }
+        return make_pair(startHour, endHour);
+    }
+
+    // Helper function to find the next available slot
+    pair<string, string> findNextAvailableSlot(const string& requestedDate, const string& requestedTime) {
+        //Simple implementation: return the next hour slot on the same day if available
+        pair<string, string> nextSlot = make_pair("", "");
+        auto requestedTimeRange = extractTimeRange(requestedTime);
+        int requestedStartHour = requestedTimeRange.first;
+        int requestedEndHour = requestedTimeRange.second;
+
+        if (requestedStartHour == -1 || requestedEndHour == -1) {
+            return nextSlot; // Return empty pair if the time format is invalid
+        }
+
+
+        // Increment the start time by 1 hour (assuming that's what makes a next available time slot)
+        int nextStartHour = requestedEndHour;
+        int nextEndHour = requestedEndHour + 2;
+
+        // Create the next available time string
+        string nextStartTime = to_string(nextStartHour) + ":00";
+        string nextEndTime = to_string(nextEndHour) + ":00";
+        string nextTimeSlot = nextStartTime + " - " + nextEndTime;
+
+
+        //Check if the next time slot is free on same date
+        if(isAvailable(requestedDate, nextTimeSlot)){
+            nextSlot = make_pair(requestedDate, nextTimeSlot);
+        }
+
+        return nextSlot;
+
+    }
+
+
 public:
     // Constructor: Called when a StudioScheduler object is created
     StudioScheduler() {
@@ -65,14 +130,29 @@ public:
         return true; // If no match is found, the time slot is available, so return true]
     }
 
-    // Function to book a studio session
-    void bookSession(const string& artist, const string& date, const string& time) { // Added const to the function signature, added const to the string&
-        if (isAvailable(date, time)) { // Check if the time slot is available using the isAvailable() function
-            bookings.push_back({artist, date, time}); // If available, create a new Booking object and add it to the bookings vector
-            saveToFile();  // Save the updated bookings to the file to persist the new booking
-            cout << "Booking confirmed for " << artist << " on " << date << " at " << time << endl; // Print a success message
+    void bookSession(const string& artist, const string& date, const string& time) {
+        if (isAvailable(date, time)) { // Check if the requested time slot is available
+            bookings.push_back({artist, date, time}); // If available, add the new booking to the vector
+            saveToFile();  // Save the updated bookings to a file
+            cout << "Booking confirmed for " << artist << " on " << date << " at " << time << endl; // Print confirmation message
+
+            // Display all booked slots for the artist
+            cout << "Already booked slots for " << artist << ":" << endl;
+            for (const auto& booking : bookings) {
+                if (booking.artist == artist) { // Check if the booking belongs to the current artist
+                    cout << booking.date << " at " << booking.time << endl; // Print each booking for the artist
+                }
+            }
         } else {
-            cout << "Error: Time slot already booked!" << endl; // Print an error message if the time slot is not available
+            cout << "Error: Time slot already booked!" << endl; // Inform user if slot is not available
+
+            // Suggest next available slot
+            auto nextSlot = findNextAvailableSlot(date, time); // Find the next available slot
+            if(!nextSlot.first.empty()){
+              cout << "Next available slot is on " << nextSlot.first << " at " << nextSlot.second << endl; // Show the next available time
+            } else {
+              cout << "No other slots available" << endl;
+            }
         }
     }
 
