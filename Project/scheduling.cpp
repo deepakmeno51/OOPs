@@ -28,7 +28,7 @@ public:
 // Concrete User Roles
 class Artist : public User {
 public:
-    Artist(const string& name) : username(name) {}
+    Artist(const string& name) { username = name; } // Fixed constructor syntax
     string getRole() const override { return "Artist"; }
     bool canBook() const override { return true; }
     bool canCancel() const override { return true; }
@@ -37,7 +37,7 @@ public:
 
 class Producer : public User {
 public:
-    Producer(const string& name) : username(name) {}
+    Producer(const string& name) { username = name; } // Fixed constructor syntax
     string getRole() const override { return "Producer"; }
     bool canBook() const override { return true; }
     bool canCancel() const override { return true; }
@@ -46,13 +46,12 @@ public:
 
 class Engineer : public User {
 public:
-    Engineer(const string& name) : username(name) {}
+    Engineer(const string& name) { username = name; } // Fixed constructor syntax
     string getRole() const override { return "Engineer"; }
-    bool canBook() const override { return false; } // Engineers can't book sessions
-    bool canCancel() const override { return false; } // Engineers can't cancel sessions
+    bool canBook() const override { return false; } 
+    bool canCancel() const override { return false; } 
     bool canList() const override { return true; }
 };
-
 
 class StudioScheduler {
 private:
@@ -67,7 +66,6 @@ private:
     const string filename = "bookings.txt";
     User* currentUser = nullptr; // Pointer to the currently logged-in user
 
-    // Helper method to determine if a date is a weekend (Simplified - no get_time)
     bool isWeekend(const string& date) {
         if (date.length() != 10 || date[4] != '-' || date[7] != '-') {
             return false; // Invalid date format
@@ -81,10 +79,9 @@ private:
             year--;
         }
         int dayOfWeek = (day + 2 * month + 3 * (month + 1) / 5 + year + year / 4 - year / 100 + year / 400 + 2) % 7;
-        return (dayOfWeek == 0 || dayOfWeek == 1); // 0 is Saturday, 1 is Sunday
+        return (dayOfWeek == 0 || dayOfWeek == 6); // Fixed: 0 is Sunday, 6 is Saturday
     }
 
-    // Helper to calculate hours from time string
     double getHoursFromTime(const string& time) {
         size_t dash = time.find(" - ");
         if (dash == string::npos) return 0.0;
@@ -95,8 +92,8 @@ private:
         sscanf(start.c_str(), "%d:%d", &startHour, &startMinute);
         sscanf(end.c_str(), "%d:%d", &endHour, &endMinute);
 
-        double duration = (endHour - startHour) + (endMinute - startMinute) / 60.0;
-        return duration;
+        double duration = (endHour + endMinute / 60.0) - (startHour + startMinute / 60.0); // Fixed duration calculation
+        return (duration < 0) ? 0 : duration; // Prevent negative duration
     }
 
     void saveToFile() {
@@ -139,7 +136,7 @@ private:
             tokens.push_back(token);
         }
 
-        if (tokens.size() >= 4) {
+        if (tokens.size() >= 3) { // Fixed: Minimum 3 tokens needed (start, "-", end)
             string startTime = tokens[0];
             string endTime = tokens[2];
 
@@ -167,13 +164,13 @@ private:
         }
 
         int nextStartHour = requestedEndHour;
-        int nextEndHour = requestedEndHour + 2;
+        int nextEndHour = (nextStartHour + 2) % 24; // Fixed: Handle day rollover
 
         string nextStartTime = to_string(nextStartHour) + ":00";
         string nextEndTime = to_string(nextEndHour) + ":00";
         string nextTimeSlot = nextStartTime + " - " + nextEndTime;
 
-        if(isAvailable(requestedDate, nextTimeSlot)){
+        if (isAvailable(requestedDate, nextTimeSlot)) {
             nextSlot = make_pair(requestedDate, nextTimeSlot);
         }
 
@@ -194,9 +191,7 @@ public:
         return true;
     }
 
-    // Authentication Function (Simplified) - returns a User* (pointer)
     User* authenticateUser(const string& username, const string& password) {
-        // Replace with a real authentication system
         if (username == "artist" && password == "artistpass") {
             return new Artist(username);
         } else if (username == "producer" && password == "producerpass") {
@@ -204,7 +199,7 @@ public:
         } else if (username == "engineer" && password == "engineerpass") {
             return new Engineer(username);
         }
-        return nullptr; // Authentication failed
+        return nullptr; 
     }
 
     void login() {
@@ -221,21 +216,13 @@ public:
             cout << "Login Successful! Welcome, " << currentUser->username << " (" << currentUser->getRole() << ")" << endl;
         } else {
             cout << "Login Failed. Invalid username or password." << endl;
-            // You might want to exit the program or return to the main menu
         }
     }
 
-
-    //Access control functions using virtual methods
     friend void bookSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time);
     friend void cancelSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time);
     friend void listBookings(const StudioScheduler& scheduler);
-
-
-}; // End of StudioScheduler Class
-
-
-// Friend Function Implementations (Access Control)
+};
 
 void bookSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time) {
     if (scheduler.currentUser == nullptr || !scheduler.currentUser->canBook()) {
@@ -269,7 +256,6 @@ void bookSession(StudioScheduler& scheduler, const string& artist, const string&
         }
     }
 }
-
 
 void cancelSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time) {
     if (scheduler.currentUser == nullptr || !scheduler.currentUser->canCancel()) {
@@ -307,7 +293,6 @@ void listBookings(const StudioScheduler& scheduler) {
     }
 }
 
-// Function to display the menu and get user input
 int displayMenu() {
     int choice;
     cout << "\n🎵 Studio Booking System 🎵" << endl;
@@ -320,33 +305,25 @@ int displayMenu() {
     return choice;
 }
 
-// Function to get booking details from the user
 void getBookingDetails(string& artist, string& date, string& time) {
-    cin.ignore(); // Consume the newline character left in the buffer
-
+    cin.ignore(); 
     cout << "Enter Artist Name: ";
     getline(cin, artist);
-
     cout << "Enter Date (YYYY-MM-DD): ";
     getline(cin, date);
-
-    cout << "Enter Time Slot (e.g., 10:00 AM - 12:00 PM): ";
+    cout << "Enter Time Slot (e.g., 10:00 - 12:00): "; // Fixed prompt to match expected format
     getline(cin, time);
 }
 
-
-// Main function (program entry point)
 int main() {
     StudioScheduler scheduler;
     int choice;
     string artist, date, time;
 
-
-    // Login
     scheduler.login();
     if (scheduler.currentUser == nullptr) {
         cout << "Exiting, as no user is logged in." << endl;
-        return 1; // Exit if login fails
+        return 1; 
     }
 
     do {
@@ -356,14 +333,14 @@ int main() {
         switch (choice) {
             case 1:
                 getBookingDetails(artist, date, time);
-                bookSession(scheduler, artist, date, time); // Call friend function
+                bookSession(scheduler, artist, date, time);
                 break;
             case 2:
                 getBookingDetails(artist, date, time);
-                cancelSession(scheduler, artist, date, time); // Call friend function
+                cancelSession(scheduler, artist, date, time);
                 break;
             case 3:
-                listBookings(scheduler); // Call friend function
+                listBookings(scheduler);
                 break;
             case 4:
                 cout << "Exiting Studio Booking System. Goodbye!" << endl;
@@ -373,7 +350,6 @@ int main() {
         }
     } while (choice != 4);
 
-    // Clean up allocated memory (important!)
     delete scheduler.currentUser;
 
     return 0;
