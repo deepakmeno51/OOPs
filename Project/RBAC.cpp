@@ -145,7 +145,7 @@ private:
     }
 
 public:
-    // Constructor - Creates users.txt if it doesn't exist
+    // Constructor - Creates users.txt if it doesn't exist and checks for admin
     AccessControlManager() {
         // Check if the user file exists. If not, create it.
         ifstream file(userFile);
@@ -159,51 +159,29 @@ public:
         }
     }
 
-    void login() {
-        string username, password;
-        cout << "\n--- Login ---" << endl;
+    // Function to register a user
+    void registerUser() {
+        string username, password, confirmPassword, role;
+        cout << "\n--- User Registration ---" << endl;
         cout << "Enter Username: ";
         cin >> username;
-        cout << "Enter Password: ";
 
-        // Password Input with Masking and Confirmation
-        password = "";
-        char ch;
-        while ((ch = getch()) != '\r') { // '\r' is the Enter key
-            if (ch == '\b') { // Backspace
-                if (!password.empty()) {
-                    cout << "\b \b"; // Erase the '*' from console
-                    password.pop_back();
-                }
-            } else {
-                cout << '*';
-                password += ch;
+        // Load users
+        vector<UserData> users = loadUsers(); // Load users only once
+
+        for (const auto& user : users) {
+            if (user.username == username) {
+                cout << "Username already exists." << endl;
+                return;
             }
         }
-        cout << endl;
-
-        User* user = authenticate(username, password);
-        if (user) {
-            delete currentUser;
-            currentUser = user;
-            cout << "Login Successful! Welcome, " << currentUser->username << " (" << currentUser->getRole() << ")" << endl;
-        } else {
-            cout << "Login Failed." << endl;
-        }
-    }
-
-    void registerAdmin() {
-        string username, password, confirmPassword;
-        cout << "\n--- Register Admin ---" << endl;
-        cout << "Enter new Admin Username: ";
-        cin >> username;
 
         // Password Input with Masking and Confirmation
         do {
             password = "";
             confirmPassword = "";
             char ch;
-            cout << "Enter new Admin Password: ";
+            cout << "Enter Password: ";
             while ((ch = getch()) != '\r') { // '\r' is the Enter key
                 if (ch == '\b') { // Backspace
                     if (!password.empty()) {
@@ -237,17 +215,46 @@ public:
             }
         } while (password != confirmPassword);
 
-        vector<UserData> users = loadUsers();
-        for (const auto& user : users) {
-            if (user.username == username) {
-                cout << "Username already exists." << endl;
-                return;
+        // Determine the role based on the current state
+        role = "Artist"; // Default role
+        users.push_back({username, password, role});
+        saveUsers(users);
+        cout << "User registered successfully as " << role << "." << endl;
+    }
+
+    void login() {
+        string username, password;
+        cout << "\n--- Login ---" << endl;
+        cout << "Enter Username: ";
+        cin >> username;
+        cout << "Enter Password: ";
+
+        // Password Input with Masking
+        password = "";
+        char ch;
+        while ((ch = getch()) != '\r') { // '\r' is the Enter key
+            if (ch == '\b') { // Backspace
+                if (!password.empty()) {
+                    cout << "\b \b"; // Erase the '*' from console
+                    password.pop_back();
+                }
+            } else {
+                cout << '*';
+                password += ch;
             }
         }
-        users.push_back({username, password, "Admin"}); // Add new user
-        saveUsers(users);
-        cout << "Admin registered successfully." << endl;
+        cout << endl;
+
+        User* user = authenticate(username, password);
+        if (user) {
+            delete currentUser;
+            currentUser = user;
+            cout << "Login Successful! Welcome, " << currentUser->username << " (" << currentUser->getRole() << ")" << endl;
+        } else {
+            cout << "Login Failed." << endl;
+        }
     }
+
     // Function to list registered users
     void listRegisteredUsers() const {
         vector<UserData> users = loadUsers();
@@ -268,6 +275,7 @@ public:
         cout << "Logged out." << endl;
     }
 
+    // Check if a user has permission to perform an action
     bool hasPermission(const string& action) const {
         if (!currentUser) {
             cout << "Not logged in." << endl;
@@ -277,7 +285,7 @@ public:
         if (action == "cancel") return currentUser->canCancel();
         if (action == "list") return currentUser->canList();
         if (action == "isAdmin") return currentUser->isAdmin(); // Check admin status
-        return false; // Default: no permission
+        return false; // Unknown action or no permission
     }
 
     User* getCurrentUser() const {
@@ -289,134 +297,14 @@ public:
     }
 };
 
-// --- Studio Scheduler ---
-class StudioScheduler {
-private:
-    struct Booking {
-        string artist;
-        string date;
-        string time;
-        double price;
-    };
-    vector<Booking> bookings;
-    const string filename = "bookings.txt";
-    AccessControlManager& accessControl; // Reference to AccessControlManager
-
-    bool isWeekend(const string& date) {
-        if (date.length() != 10 || date[4] != '-' || date[7] != '-') {
-            return false;
-        }
-        int year, month, day;
-        sscanf(date.c_str(), "%d-%d-%d", &year, &month, &day);
-        if (month < 3) { month += 12; year--; }
-        int dayOfWeek = (day + 2 * month + 3 * (month + 1) / 5 + year + year / 4 - year / 100 + year / 400 + 2) % 7;
-        return (dayOfWeek == 0 || dayOfWeek == 6);
-    }
-    double getHoursFromTime(const string& time) {
-        size_t dash = time.find(" - ");
-        if (dash == string::npos) return 0.0;
-        string start = time.substr(0, dash);
-        string end = time.substr(dash + 3);
-        int startHour, startMinute, endHour, endMinute;
-        sscanf(start.c_str(), "%d:%d", &startHour, &startMinute);
-        sscanf(end.c_str(), "%d:%d", &endHour, &endMinute);
-        double duration = (endHour + endMinute / 60.0) - (startHour + startMinute / 60.0);
-        return (duration < 0) ? 0 : duration;
-    }
-
-    void saveBookingsToFile() {
-        ofstream file(filename);
-        if (file.is_open()) {
-            for (const auto& booking : bookings) {
-                file << booking.artist << "," << booking.date << "," << booking.time << "," << fixed << setprecision(2) << booking.price << endl;
-            }
-            file.close();
-        }
-    }
-    void loadBookingsFromFile() {
-        ifstream file(filename);
-        if (file.is_open()) {
-            bookings.clear();
-            string line;
-            while (getline(file, line)) {
-                size_t pos1 = line.find(','), pos2 = line.find(',', pos1 + 1), pos3 = line.find(',', pos2 + 1);
-                if (pos1 != string::npos && pos2 != string::npos && pos3 != string::npos) {
-                    string artist = line.substr(0, pos1);
-                    string date = line.substr(pos1 + 1, pos2 - pos1 - 1);
-                    string time = line.substr(pos2 + 1, pos3 - pos2 - 1);
-                    double price = stod(line.substr(pos3 + 1));
-                    bookings.push_back({artist, date, time, price});
-                }
-            }
-            file.close();
-        }
-    }
-
-public:
-    StudioScheduler(AccessControlManager& acm) : accessControl(acm) {
-        loadBookingsFromFile();
-    }
-    bool isAvailable(const string& date, const string& time) const {
-        for (const auto& booking : bookings) {
-            if (booking.date == date && booking.time == time) {
-                return false;
-            }
-        }
-        return true;
-    }
-    void bookSession(const string& artist, const string& date, const string& time) {
-        if (!accessControl.hasPermission("book")) {
-            cout << "No permission." << endl;
-            return;
-        }
-        double rate = isWeekend(date) ? 15.0 : 10.0;
-        double hours = getHoursFromTime(time);
-        double price = hours * rate;
-        if (isAvailable(date, time)) {
-            bookings.push_back({artist, date, time, price});
-            saveBookingsToFile();
-            cout << "Booked for " << artist << " on " << date << " at " << time << " for $" << fixed << setprecision(2) << price << endl;
-        } else {
-            cout << "Time slot unavailable." << endl;
-        }
-    }
-    void cancelSession(const string& artist, const string& date, const string& time) {
-        if (!accessControl.hasPermission("cancel")) {
-            cout << "No permission." << endl;
-            return;
-        }
-        auto it = remove_if(bookings.begin(), bookings.end(),
-                            [&](const Booking& booking) {
-                                return booking.artist == artist && booking.date == date && booking.time == time;
-                            });
-        if (it != bookings.end()) {
-            bookings.erase(it, bookings.end());
-            saveBookingsToFile();
-            cout << "Cancelled." << endl;
-        } else {
-            cout << "Not found." << endl;
-        }
-    }
-    void listBookings() const {
-        if (!accessControl.hasPermission("list")) {
-            cout << "No permission." << endl;
-            return;
-        }
-        if (bookings.empty()) {
-            cout << "No bookings." << endl;
-            return;
-        }
-        cout << "\nBookings:\n";
-        for (const auto& booking : bookings) {
-            cout << booking.artist << " | " << booking.date << " | " << booking.time << " | $" << fixed << setprecision(2) << booking.price << endl;
-        }
-    }
-};
-
 // --- Menu and Main Function ---
 int displayMenu() {
-    cout << "\n--- Studio Booking ---" << endl;
-    cout << "1. Book\n2. Cancel\n3. List\n4. Exit" << endl;
+    cout << "\n--- Actions ---" << endl;
+    cout << "1. Book Session (Check Permission)" << endl;
+    cout << "2. Cancel Session (Check Permission)" << endl;
+    cout << "3. List Bookings (Check Permission)" << endl;
+    cout << "4. Is Admin? (Check Permission)" << endl;
+    cout << "5. Exit" << endl;
     cout << "Enter choice: ";
     int choice;
     cin >> choice;
@@ -424,33 +312,37 @@ int displayMenu() {
 }
 
 int main() {
-    AccessControlManager accessControl;  // Create Access Control Manager
-    StudioScheduler scheduler(accessControl); // Pass accessControl to StudioScheduler
+    AccessControlManager accessControl; // Create Access Control Manager
     string username, password;
+    int authChoice;
 
     // Login or Register
-    int authChoice;
     do {
-        cout << "\n1. Login\n2. Register Admin\n3. List Registered Users\n4. Exit";
+        cout << "\n1. Login\n2. Register\n3. List Registered Users\n4. Exit";
         cout << "\nEnter choice: ";
         cin >> authChoice;
+
         if (authChoice == 1) {
             accessControl.login();
-        } else if (authChoice == 2) {
-            accessControl.registerAdmin();
-        } else if (authChoice == 3) {
+        }
+        else if (authChoice == 2) {
+            accessControl.registerUser();
+        }
+        else if (authChoice == 3) {
              if (accessControl.getCurrentUser() != nullptr && accessControl.hasPermission("isAdmin")) {
                 accessControl.listRegisteredUsers();
             } else {
                 cout << "You do not have the permissions to list users" << endl;
             }
-        } else if (authChoice == 4) {
+        }
+        else if (authChoice == 4) {
             cout << "Exiting..." << endl;
             return 0;
-        } else {
+        }
+        else {
             cout << "Invalid choice." << endl;
         }
-    } while (authChoice != 1 && authChoice != 2 && authChoice != 3 && authChoice !=4 && accessControl.getCurrentUser() == nullptr);
+    } while (authChoice != 1 && authChoice != 4 && accessControl.getCurrentUser() == nullptr);
 
     if (!accessControl.getCurrentUser()) {
         cout << "Exiting." << endl;
@@ -458,7 +350,6 @@ int main() {
     }
 
     int choice;
-    string artist, date, time;
 
     do {
         cout << "\nLogged in as: " << accessControl.getCurrentUser()->username << " (" << accessControl.getCurrentUser()->getRole() << ")";
@@ -466,23 +357,18 @@ int main() {
 
         switch (choice) {
             case 1:
-                cin.ignore(); // Consume newline
-                cout << "Enter Artist: "; getline(cin, artist);
-                cout << "Enter Date (YYYY-MM-DD): "; getline(cin, date);
-                cout << "Enter Time: "; getline(cin, time);
-                scheduler.bookSession(artist, date, time);
+                accessControl.hasPermission("book");
                 break;
             case 2:
-                cin.ignore(); // Consume newline
-                cout << "Enter Artist: "; getline(cin, artist);
-                cout << "Enter Date (YYYY-MM-DD): "; getline(cin, date);
-                cout << "Enter Time: "; getline(cin, time);
-                scheduler.cancelSession(artist, date, time);
+                accessControl.hasPermission("cancel");
                 break;
             case 3:
-                scheduler.listBookings();
+                accessControl.hasPermission("list");
                 break;
             case 4:
+                 accessControl.hasPermission("isAdmin");
+                 break;
+            case 5:
                 cout << "Exiting." << endl;
                 break;
             default:
