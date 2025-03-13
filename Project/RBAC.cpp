@@ -8,6 +8,32 @@
 #include <ctime>
 #include <iomanip>
 
+// Conditional inclusion for getch() - handles both Windows and Unix-like systems
+#ifdef _WIN32
+#include <conio.h> // For _getch() on Windows
+#define getch _getch
+#else
+#include <termios.h> // For getch() on Unix-like systems (Linux, macOS)
+#include <unistd.h>
+#include <stdio.h> // Required for getchar() in the Linux getch implementation
+
+char getch() {
+    int ch;
+    struct termios oldt, newt;
+
+    tcgetattr(STDIN_FILENO, &oldt); // Save current terminal settings
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO); // Turn off canonical mode and echoing
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt); // Apply new settings
+
+    ch = getchar(); // Read a character (no echo)
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt); // Restore old settings
+    return (char)ch;
+}
+
+#endif
+
 using namespace std;
 
 // --- User Roles ---
@@ -19,7 +45,7 @@ public:
     virtual bool canCancel() const = 0;
     virtual bool canList() const = 0;
     virtual bool isAdmin() const = 0;
-    virtual ~User() {} // Virtual Destructor
+    virtual ~User() {}
     User(const string& name) : username(name) {}
 };
 
@@ -67,7 +93,7 @@ public:
 class AccessControlManager {
 private:
     User* currentUser = nullptr;
-    const string userFile = "users.txt"; // File for user data
+    const string userFile = "users.txt";
 
     struct UserData {
         string username;
@@ -76,7 +102,7 @@ private:
     };
 
     // Load users from file
-    vector<UserData> loadUsers() {
+    vector<UserData> loadUsers() const {
         vector<UserData> users;
         ifstream file(userFile);
         if (file.is_open()) {
@@ -119,13 +145,42 @@ private:
     }
 
 public:
+    // Constructor - Creates users.txt if it doesn't exist
+    AccessControlManager() {
+        // Check if the user file exists. If not, create it.
+        ifstream file(userFile);
+        if (!file.is_open()) {
+            ofstream createFile(userFile); // Create an empty file
+            if (createFile.is_open()) {
+                createFile.close();
+            } else {
+                cerr << "Error: Could not create user file." << endl; // Handle the error
+            }
+        }
+    }
+
     void login() {
         string username, password;
         cout << "\n--- Login ---" << endl;
         cout << "Enter Username: ";
         cin >> username;
         cout << "Enter Password: ";
-        cin >> password;
+
+        // Password Input with Masking and Confirmation
+        password = "";
+        char ch;
+        while ((ch = getch()) != '\r') { // '\r' is the Enter key
+            if (ch == '\b') { // Backspace
+                if (!password.empty()) {
+                    cout << "\b \b"; // Erase the '*' from console
+                    password.pop_back();
+                }
+            } else {
+                cout << '*';
+                password += ch;
+            }
+        }
+        cout << endl;
 
         User* user = authenticate(username, password);
         if (user) {
@@ -138,12 +193,49 @@ public:
     }
 
     void registerAdmin() {
-        string username, password;
+        string username, password, confirmPassword;
         cout << "\n--- Register Admin ---" << endl;
         cout << "Enter new Admin Username: ";
         cin >> username;
-        cout << "Enter new Admin Password: ";
-        cin >> password;
+
+        // Password Input with Masking and Confirmation
+        do {
+            password = "";
+            confirmPassword = "";
+            char ch;
+            cout << "Enter new Admin Password: ";
+            while ((ch = getch()) != '\r') { // '\r' is the Enter key
+                if (ch == '\b') { // Backspace
+                    if (!password.empty()) {
+                        cout << "\b \b"; // Erase the '*' from console
+                        password.pop_back();
+                    }
+                }
+                else {
+                    cout << '*';
+                    password += ch;
+                }
+            }
+            cout << endl;
+
+            cout << "Confirm Password: ";
+            while ((ch = getch()) != '\r') { // '\r' is the Enter key
+                if (ch == '\b') { // Backspace
+                    if (!confirmPassword.empty()) {
+                        cout << "\b \b"; // Erase the '*' from console
+                        confirmPassword.pop_back();
+                    }
+                } else {
+                    cout << '*';
+                    confirmPassword += ch;
+                }
+            }
+            cout << endl;
+
+            if (password != confirmPassword) {
+                cout << "Passwords do not match. Please re-enter." << endl;
+            }
+        } while (password != confirmPassword);
 
         vector<UserData> users = loadUsers();
         for (const auto& user : users) {
@@ -155,6 +247,19 @@ public:
         users.push_back({username, password, "Admin"}); // Add new user
         saveUsers(users);
         cout << "Admin registered successfully." << endl;
+    }
+    // Function to list registered users
+    void listRegisteredUsers() const {
+        vector<UserData> users = loadUsers();
+        if (users.empty()) {
+            cout << "No users registered yet." << endl;
+            return;
+        }
+
+        cout << "\n--- Registered Users ---" << endl;
+        for (const auto& user : users) {
+            cout << "Username: " << user.username << ", Role: " << user.role << endl;
+        }
     }
 
     void logout() {
@@ -326,16 +431,26 @@ int main() {
     // Login or Register
     int authChoice;
     do {
-        cout << "\n1. Login\n2. Register Admin\nEnter choice: ";
+        cout << "\n1. Login\n2. Register Admin\n3. List Registered Users\n4. Exit";
+        cout << "\nEnter choice: ";
         cin >> authChoice;
         if (authChoice == 1) {
             accessControl.login();
         } else if (authChoice == 2) {
             accessControl.registerAdmin();
+        } else if (authChoice == 3) {
+             if (accessControl.getCurrentUser() != nullptr && accessControl.hasPermission("isAdmin")) {
+                accessControl.listRegisteredUsers();
+            } else {
+                cout << "You do not have the permissions to list users" << endl;
+            }
+        } else if (authChoice == 4) {
+            cout << "Exiting..." << endl;
+            return 0;
         } else {
             cout << "Invalid choice." << endl;
         }
-    } while (authChoice != 1 && authChoice != 2 && accessControl.getCurrentUser() == nullptr);
+    } while (authChoice != 1 && authChoice != 2 && authChoice != 3 && authChoice !=4 && accessControl.getCurrentUser() == nullptr);
 
     if (!accessControl.getCurrentUser()) {
         cout << "Exiting." << endl;
