@@ -139,6 +139,214 @@ private:
                 endHour = stoi(endTime.substr(0, colonPos2));
             }
         }
+        return make_pair(startHour, endHour);
+    }
+
+    pair<string, string> findNextAvailableSlot(const string& requestedDate, const string& requestedTime) {
+        pair<string, string> nextSlot = make_pair("", "");
+
+        auto requestedTimeRange = extractTimeRange(requestedTime);
+        int requestedStartHour = requestedTimeRange.first;
+        int requestedEndHour = requestedTimeRange.second;
+
+        if (requestedStartHour == -1 || requestedEndHour == -1) {
+            return nextSlot; // Invalid time format
+        }
+
+        int nextStartHour = requestedEndHour;
+        int nextEndHour = requestedEndHour + 2; // Assuming bookings are in 2-hour blocks
+
+        string nextStartTime = to_string(nextStartHour) + ":00";
+        string nextEndTime = to_string(nextEndHour) + ":00";
+        string nextTimeSlot = nextStartTime + " - " + nextEndTime;
+
+        if (isAvailable(requestedDate, nextTimeSlot)) {
+            nextSlot = make_pair(requestedDate, nextTimeSlot);
+        }
+        return nextSlot;
+    }
+
+public:
+    StudioScheduler() {
+        loadFromFile();
+    }
+
+    ~StudioScheduler() {  // Added destructor to clean up currentUser
+        delete currentUser;
+        currentUser = nullptr;
+    }
+
+    bool isAvailable(const string& date, const string& time) const {
+        for (const auto& booking : bookings) {
+            if (booking.date == date && booking.time == time) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    User* authenticateUser(const string& username, const string& password) {
+        if (username == "artist" && password == "artistpass") {
+            return new Artist(username);
+        } else if (username == "producer" && password == "producerpass") {
+            return new Producer(username);
+        } else if (username == "engineer" && password == "engineerpass") {
+            return new Engineer(username);
+        }
+        return nullptr;
+    }
+
+    friend void bookSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time);
+    friend void cancelSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time);
+    friend void listBookings(const StudioScheduler& scheduler);
+    friend void login(StudioScheduler& scheduler);
+};
+
+void bookSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time) {
+    if (scheduler.currentUser == nullptr || !scheduler.currentUser->canBook()) {
+        cout << "Error: You do not have permission to book sessions." << endl;
         return;
     }
-};
+
+    double rate = scheduler.isWeekend(date) ? 15.0 : 10.0;
+    double hours = scheduler.getHoursFromTime(time);
+    double price = hours * rate;
+
+    if (scheduler.isAvailable(date, time)) {
+        scheduler.bookings.push_back({artist, date, time, price});
+        scheduler.saveToFile();
+        cout << "Booking confirmed for " << artist << " on " << date << " at " << time << ". Total Cost: $" << fixed << setprecision(2) << price << endl;
+
+        cout << "Already booked slots for " << artist << ":" << endl;
+        for (const auto& booking : scheduler.bookings) {
+            if (booking.artist == artist) {
+                cout << booking.date << " at " << booking.time << " - Cost: $" << fixed << setprecision(2) << booking.price << endl;
+            }
+        }
+    } else {
+        cout << "Error: Time slot already booked!" << endl;
+        auto nextSlot = scheduler.findNextAvailableSlot(date, time);
+        if (!nextSlot.first.empty()) {
+            cout << "Next available slot is on " << nextSlot.first << " at " << nextSlot.second << endl;
+        } else {
+            cout << "No other slots available" << endl;
+        }
+    }
+}
+
+void cancelSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time) {
+    if (scheduler.currentUser == nullptr || !scheduler.currentUser->canCancel()) {
+        cout << "Error: You do not have permission to cancel sessions." << endl;
+        return;
+    }
+    auto it = remove_if(scheduler.bookings.begin(), scheduler.bookings.end(),
+                       [&](const StudioScheduler::Booking& booking) {
+                           return booking.artist == artist && booking.date == date && booking.time == time;
+                       });
+
+    if (it != scheduler.bookings.end()) {
+        scheduler.bookings.erase(it, scheduler.bookings.end());
+        scheduler.saveToFile();
+        cout << "Session canceled for " << artist << " on " << date << " at " << time << endl;
+    } else {
+        cout << "Error: No matching booking found!" << endl;
+    }
+}
+
+void listBookings(const StudioScheduler& scheduler) {
+    if (scheduler.currentUser == nullptr || !scheduler.currentUser->canList()) {
+        cout << "Error: You do not have permission to list bookings." << endl;
+        return;
+    }
+    if (scheduler.bookings.empty()) {
+        cout << "No bookings available." << endl;
+        return;
+    }
+
+    cout << "\nCurrent Studio Bookings:\n";
+    for (const auto& booking : scheduler.bookings) {
+        cout << "Artist: " << booking.artist << " | Date: " << booking.date << " | Time: " << booking.time << " | Cost: $" << fixed << setprecision(2) << booking.price << endl;
+    }
+}
+
+void login(StudioScheduler& scheduler) {
+    string username, password;
+    cout << "\n--- Login ---" << endl;
+    cout << "Enter Username: ";
+    cin >> username;
+    cout << "Enter Password: ";
+    cin >> password;
+
+    User* user = scheduler.authenticateUser(username, password);
+    if (user) {
+        if (scheduler.currentUser != nullptr) {  // Check before deletion to avoid double deletion
+            delete scheduler.currentUser;        // Delete old user only if it exists
+        }
+        scheduler.currentUser = user;            // Assign new user
+        cout << "Login Successful! Welcome, " << scheduler.currentUser->username << " (" << scheduler.currentUser->getRole() << ")" << endl;
+    } else {
+        cout << "Login Failed. Invalid username or password." << endl;
+    }
+}
+
+int displayMenu() {
+    int choice;
+    cout << "\n🎵 Studio Booking System 🎵" << endl;
+    cout << "1️⃣ Book a Session" << endl;
+    cout << "2️⃣ Cancel a Session" << endl;
+    cout << "3️⃣ List Bookings" << endl;
+    cout << "4️⃣ Exit" << endl;
+    cout << "Enter your choice: ";
+    cin >> choice;
+    return choice;
+}
+
+void getBookingDetails(string& artist, string& date, string& time) {
+    cin.ignore();
+    cout << "Enter Artist Name: ";
+    getline(cin, artist);
+    cout << "Enter Date (YYYY-MM-DD): ";
+    getline(cin, date);
+    cout << "Enter Time Slot (e.g., 10:00 AM - 12:00 PM): ";
+    getline(cin, time);
+}
+
+int main() {
+    StudioScheduler scheduler;
+    int choice;
+    string artist, date, time;
+
+    login(scheduler);
+    if (scheduler.currentUser == nullptr) {
+        cout << "Exiting, as no user is logged in." << endl;
+        return 1;
+    }
+
+    do {
+        cout << "\nLogged in as: " << scheduler.currentUser->username << " (" << scheduler.currentUser->getRole() << ")";
+        choice = displayMenu();
+
+        switch (choice) {
+            case 1:
+                getBookingDetails(artist, date, time);
+                bookSession(scheduler, artist, date, time);
+                break;
+            case 2:
+                getBookingDetails(artist, date, time);
+                cancelSession(scheduler, artist, date, time);
+                break;
+            case 3:
+                listBookings(scheduler);
+                break;
+            case 4:
+                cout << "Exiting Studio Booking System. Goodbye!" << endl;
+                break;
+            default:
+                cout << "Invalid choice. Please try again." << endl;
+        }
+    } while (choice != 4);
+
+    delete scheduler.currentUser;  // Still valid as final cleanup
+
+    return 0;
+}
