@@ -286,7 +286,6 @@ public:
             }
         } while (password != confirmPassword);
 
-
         vector<UserData> users = loadUsers();
         for (const auto& user : users) {
             if (user.username == username) {
@@ -418,13 +417,12 @@ int main() {
             default:
                 cout << "Invalid choice." << endl;
         }
-    } while (authChoice != 2 && accessControl.getCurrentUser() == nullptr && authChoice!=3); // Keep looping until login *or* exit
+    } while (accessControl.getCurrentUser() == nullptr && authChoice != 3); // Fixed: Simplified condition to avoid infinite loop
 
     if (!accessControl.getCurrentUser()) {
         cout << "Exiting." << endl;
         return 1; // Exit if no user is logged in
     }
-
 
     do {
         cout << "\nLogged in as: " << accessControl.getCurrentUser()->username << " (" << accessControl.getCurrentUser()->getRole() << ")";
