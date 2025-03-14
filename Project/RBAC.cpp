@@ -94,6 +94,7 @@ class AccessControlManager {
 private:
     User* currentUser = nullptr;
     const string userFile = "users.txt";
+    bool adminRegistered = false;
 
     struct UserData {
         string username;
@@ -156,19 +157,26 @@ public:
             } else {
                 cerr << "Error: Could not create user file." << endl; // Handle the error
             }
+        } else {
+            // Check if an admin already exists
+            vector<UserData> users = loadUsers();
+            for (const auto& user : users) {
+                if (user.role == "Admin") {
+                    adminRegistered = true;
+                    break;
+                }
+            }
         }
     }
 
     // Function to register a user
     void registerUser() {
         string username, password, confirmPassword, role;
-        cout << "\n--- User Registration ---" << endl;
+        cout << "\n--- New User Registration ---" << endl;
         cout << "Enter Username: ";
         cin >> username;
 
-        // Load users
-        vector<UserData> users = loadUsers(); // Load users only once
-
+        vector<UserData> users = loadUsers();
         for (const auto& user : users) {
             if (user.username == username) {
                 cout << "Username already exists." << endl;
@@ -215,11 +223,81 @@ public:
             }
         } while (password != confirmPassword);
 
-        // Determine the role based on the current state
-        role = "Artist"; // Default role
+        cout << "Enter Role (Artist/Producer/Engineer): ";
+        cin >> role;
+        // Validate role input
+        if (role != "Artist" && role != "Producer" && role != "Engineer") {
+            cout << "Invalid role. Registration cancelled." << endl;
+            return;
+        }
+
         users.push_back({username, password, role});
         saveUsers(users);
         cout << "User registered successfully as " << role << "." << endl;
+    }
+
+    void registerAdmin() {
+        if (adminRegistered) {
+            cout << "Admin already registered.  Only one admin allowed." << endl;
+            return;
+        }
+
+        string username, password, confirmPassword;
+        cout << "\n--- Admin Registration ---" << endl;
+        cout << "Enter Admin Username: ";
+        cin >> username;
+
+        // Password Input with Masking and Confirmation
+        do {
+            password = "";
+            confirmPassword = "";
+            char ch;
+            cout << "Enter Admin Password: ";
+            while ((ch = getch()) != '\r') { // '\r' is the Enter key
+                if (ch == '\b') { // Backspace
+                    if (!password.empty()) {
+                        cout << "\b \b"; // Erase the '*' from console
+                        password.pop_back();
+                    }
+                }
+                else {
+                    cout << '*';
+                    password += ch;
+                }
+            }
+            cout << endl;
+
+            cout << "Confirm Password: ";
+            while ((ch = getch()) != '\r') { // '\r' is the Enter key
+                if (ch == '\b') { // Backspace
+                    if (!confirmPassword.empty()) {
+                        cout << "\b \b"; // Erase the '*' from console
+                        confirmPassword.pop_back();
+                    }
+                } else {
+                    cout << '*';
+                    confirmPassword += ch;
+                }
+            }
+            cout << endl;
+
+            if (password != confirmPassword) {
+                cout << "Passwords do not match. Please re-enter." << endl;
+            }
+        } while (password != confirmPassword);
+
+
+        vector<UserData> users = loadUsers();
+        for (const auto& user : users) {
+            if (user.username == username) {
+                cout << "Username already exists." << endl;
+                return;
+            }
+        }
+        users.push_back({username, password, "Admin"});
+        saveUsers(users);
+        adminRegistered = true;
+        cout << "Admin registered successfully." << endl;
     }
 
     void login() {
@@ -298,62 +376,66 @@ public:
 };
 
 // --- Menu and Main Function ---
-int displayMenu() {
-    cout << "\n--- Actions ---" << endl;
-    cout << "1. Book Session (Check Permission)" << endl;
-    cout << "2. Cancel Session (Check Permission)" << endl;
-    cout << "3. List Bookings (Check Permission)" << endl;
-    cout << "4. Is Admin? (Check Permission)" << endl;
-    cout << "5. Exit" << endl;
-    cout << "Enter choice: ";
-    int choice;
-    cin >> choice;
-    return choice;
-}
 
 int main() {
-    AccessControlManager accessControl; // Create Access Control Manager
-    string username, password;
-    int authChoice;
+    AccessControlManager accessControl;
+    int choice;
 
-    // Login or Register
+    // Fixed: Moved the login *before* the main loop.  This ensures a user *must* log in or register first.
+    int authChoice;
     do {
-        cout << "\n1. Login\n2. Register\n3. List Registered Users\n4. Exit";
-        cout << "\nEnter choice: ";
+        cout << "\n--- Main Menu ---" << endl;
+        cout << "1. Sign Up" << endl;
+        cout << "2. Login" << endl;
+        cout << "3. Exit" << endl;
+        cout << "Enter choice: ";
         cin >> authChoice;
 
-        if (authChoice == 1) {
-            accessControl.login();
-        }
-        else if (authChoice == 2) {
-            accessControl.registerUser();
-        }
-        else if (authChoice == 3) {
-             if (accessControl.getCurrentUser() != nullptr && accessControl.hasPermission("isAdmin")) {
-                accessControl.listRegisteredUsers();
-            } else {
-                cout << "You do not have the permissions to list users" << endl;
+        switch (authChoice) {
+            case 1: { // Sign Up Menu
+                int signUpChoice;
+                cout << "\n--- Sign Up ---" << endl;
+                cout << "1. New User" << endl;
+                cout << "2. Admin Register" << endl;
+                cout << "Enter choice: ";
+                cin >> signUpChoice;
+
+                if (signUpChoice == 1) {
+                    accessControl.registerUser(); // Call the registerUser function
+                } else if (signUpChoice == 2) {
+                    accessControl.registerAdmin();
+                } else {
+                    cout << "Invalid choice." << endl;
+                }
+                break;
             }
+            case 2:
+                accessControl.login();
+                break;
+            case 3:
+                cout << "Exiting..." << endl;
+                return 0;  // Exit the program
+            default:
+                cout << "Invalid choice." << endl;
         }
-        else if (authChoice == 4) {
-            cout << "Exiting..." << endl;
-            return 0;
-        }
-        else {
-            cout << "Invalid choice." << endl;
-        }
-    } while (authChoice != 1 && authChoice != 4 && accessControl.getCurrentUser() == nullptr);
+    } while (authChoice != 2 && accessControl.getCurrentUser() == nullptr && authChoice!=3); // Keep looping until login *or* exit
 
     if (!accessControl.getCurrentUser()) {
         cout << "Exiting." << endl;
         return 1; // Exit if no user is logged in
     }
 
-    int choice;
 
     do {
         cout << "\nLogged in as: " << accessControl.getCurrentUser()->username << " (" << accessControl.getCurrentUser()->getRole() << ")";
-        choice = displayMenu();
+        cout << "\n--- Actions ---" << endl; // Re-display actions to the user
+        cout << "1. Book Session (Check Permission)" << endl;
+        cout << "2. Cancel Session (Check Permission)" << endl;
+        cout << "3. List Bookings (Check Permission)" << endl;
+        cout << "4. Is Admin? (Check Permission)" << endl;
+        cout << "5. Logout" << endl; // Added logout option to the action menu
+        cout << "Enter choice: ";
+        cin >> choice;
 
         switch (choice) {
             case 1:
@@ -369,12 +451,14 @@ int main() {
                  accessControl.hasPermission("isAdmin");
                  break;
             case 5:
-                cout << "Exiting." << endl;
+                accessControl.logout(); // Logout
                 break;
             default:
                 cout << "Invalid choice." << endl;
         }
-    } while (choice != 4);
-    delete accessControl.getCurrentUser();
+    } while (choice != 5 && accessControl.getCurrentUser() != nullptr); // Stop the menu when the user chooses to logout or exit
+
+    delete accessControl.getCurrentUser(); // Clean up current user at the end
+    cout << "Exiting Program." << endl; // Add message before exiting
     return 0;
 }
