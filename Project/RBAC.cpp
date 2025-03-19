@@ -1,12 +1,12 @@
 #include <iostream>
-#include <fstream>
+#include <fstream> //  is used to access file input and output functionalities, enabling you to read from and write to files using classes like ifstream, ofstream, and fstream. 
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <sstream>
-#include <utility>
-#include <ctime>
-#include <iomanip>
+#include <sstream> // allows to treat strings as input or output streams, enabling operations like aprsing and formatting data from/to strings as if they were files or console I/O
+#include <utility> // is a directive in C++ provides access to the std::pair template and utility functions like std::swap, std::forward, and std::move, which are essential for working with pairs, swapping values, and moving resources. 
+#include <ctime> // is a directive in C and C++ is used to access functions and data types related to time and date manipulation, including functions like time(), ctime(), localtime(), and gmtime()
+#include <iomanip> // is a directive in C++ is used to include the iomanip library, which controls the formatting of input and output streams. 
 
 // Conditional inclusion for getch() - handles both Windows and Unix-like systems
 #ifdef _WIN32
