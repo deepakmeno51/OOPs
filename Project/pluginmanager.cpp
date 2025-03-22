@@ -3,6 +3,7 @@
 #include <string>
 #include <algorithm>
 #include <stdexcept>
+#include <map> // For a more organized plugin suggestion system
 
 using namespace std;
 
@@ -17,105 +18,136 @@ class PluginManager {
 private:
     vector<Plugin> plugins;
 
+    // A map to link functionalities to plugin names (for suggestions)
+    map<string, vector<string>> functionalityToPlugins = {
+        {"EQ", {"FabFilter Pro-Q 3", "SSL Native X-EQ 2", "Maag EQ4"}},
+        {"Compression", {"FabFilter Pro-C 2", "Waves CLA-76", "Tube-Tech CL 1B", "OTT (Xfer Records)"}},
+        {"Limiting", {"FabFilter Pro-L 2", "Waves SSL G-Master Buss Compressor"}},
+        {"Reverb", {"Valhalla Room", "FabFilter Pro-R", "Eventide H3000"}},
+        {"Delay", {"Waves H-Delay Hybrid Delay", "Soundtoys Echoboy"}},
+        {"Distortion", {"Soundtoys Decapitator", "Waves Abbey Road J37 Tape", "Sausage Fattener", "RC-20 Retro Color", "Thermal (Output)"}},
+        {"Chorus", {"Waves Chorus", "TAL Chorus-LX", "MicroShift", "Eventide H3000"}},
+        {"Flanger", {"Waves Chorus", "Eventide H3000"}}, // Reusing chorus plugins since both have similar effect
+        {"Phaser", {"Phaser BI-TRON", "Eventide H3000"}},
+        {"Gate", {"Waves NS1 Noise Suppressor", "Waves Clarity Vx"}},
+        {"Noise Reduction", {"Waves Clarity Vx", "Waves NS1 Noise Suppressor"}},
+        {"De-esser", {"Waves Clarity Vx", "Waves Curves Equator"}},
+        {"Pitch Correction", {"Waves Tune Real-Time", "Waves Clarity Vx", "Melodyne 5", "Auto-Tune Pro"}},
+        {"Synthesizer", {"Serum (Xfer Records)", "Omnisphere (Spectrasonics)", "Massive (Native Instruments)", "u-he Diva", "Korg Minilogue"}},
+        {"Drums", {"Addictive Drums 2", "XLN Audio XO", "Superior Drummer 3"}},
+        {"Virtual Instruments", {"Arturia Analog Lab", "Korg Minilogue", "Keyscape (Spectrasonics)"}},
+        {"Mastering", {"iZotope Ozone", "Waves SSL G-Master Buss Compressor", "T-RackS 5"}},
+        {"Spectrum Analyzer", {"SPAN (Voxengo)"}},
+        {"Loudness Meter", {"Youlean Loudness Meter"}},
+        {"Vocal Processing", {"VocalSynth 2", "Waves Tune Real-Time", "Waves Clarity™ Vx"}}, // VocalSynth and Tuner
+        {"Mixing", {"Neutron 4 (iZotope)"}},
+        {"Audio Analysis", {"Mastering The Mix EXPOSE 2"}},
+        {"Special FX", {"ShaperBox 3", "Portal (Output)", "Looperator (Sugar Bytes)", "Effectrix (Sugar Bytes)"}}
+
+    };
+
 public:
-    void addPlugin(const string& pluginName) {
-        try {
-            string description, author, category;
-            cout << "Enter Plugin Description: ";
-            cin.ignore();
-            getline(cin, description);
-            cout << "Enter Plugin Author: ";
-            getline(cin, author);
-            cout << "Enter Plugin Category (e.g., 'Effect', 'Instrument'): ";
-            getline(cin, category);
+    // Constructor - Adds the predefined plugins
+    PluginManager() {
+        //  1. Instruments
+        addPlugin("Serum (Xfer Records)", "Wavetable synthesizer", "Xfer Records", "Synthesizer");
+        addPlugin("Omnisphere (Spectrasonics)", "Powerful synthesizer", "Spectrasonics", "Synthesizer");
+        addPlugin("Kontakt (Native Instruments)", "Sampler", "Native Instruments", "Virtual Instruments");
+        addPlugin("Massive (Native Instruments)", "Synthesizer", "Native Instruments", "Synthesizer");
+        addPlugin("Keyscape (Spectrasonics)", "Keyboard and piano instruments", "Spectrasonics", "Virtual Instruments");
+        addPlugin("Addictive Drums 2 (XLN Audio)", "Realistic drum sounds", "XLN Audio", "Drums");
+        addPlugin("Superior Drummer 3 (Toontrack)", "Advanced drum sampling", "Toontrack", "Drums");
 
-            if (pluginName.empty()) {
-                throw invalid_argument("Plugin name cannot be empty");
-            }
+        // 2. Effects
+        addPlugin("Valhalla Room (Valhalla DSP)", "Algorithmic reverb", "Valhalla DSP", "Reverb");
+        addPlugin("FabFilter Pro-R (FabFilter)", "Natural and flexible reverb", "FabFilter", "Reverb");
+        addPlugin("EchoBoy (Soundtoys)", "Analog-style delay", "Soundtoys", "Delay");
+        addPlugin("H-Delay (Waves)", "Classic delay", "Waves", "Delay");
+        addPlugin("FabFilter Pro-Q 3 (FabFilter)", "Parametric EQ with dynamic capabilities", "FabFilter", "EQ");
+        addPlugin("SSL Native X-EQ 2 (Solid State Logic)", "Precision equalizer", "Solid State Logic", "EQ");
+        addPlugin("Maag EQ4 (Maag Audio)", "Air-band EQ", "Maag Audio", "EQ");
+        addPlugin("FabFilter Pro-C 2 (FabFilter)", "Versatile compressor", "FabFilter", "Compression");
+        addPlugin("Waves CLA-76 (Waves)", "FET-style compressor", "Waves", "Compression");
+        addPlugin("Tube-Tech CL 1B (Softube)", "Opto compressor", "Softube", "Compression");
+        addPlugin("OTT (Xfer Records)", "Multi-band compression", "Xfer Records", "Compression");
+        addPlugin("Decapitator (Soundtoys)", "Analog saturation and distortion", "Soundtoys", "Distortion");
+        addPlugin("Sausage Fattener (Dada Life)", "Saturation for adding thickness", "Dada Life", "Distortion");
+        addPlugin("RC-20 Retro Color (XLN Audio)", "Lo-fi, tape saturation", "XLN Audio", "Distortion");
+        addPlugin("Thermal (Output)", "Multi-stage distortion", "Output", "Distortion");
+        addPlugin("Waves Chorus (Waves)", "Chorus effect", "Waves", "Chorus");
+        addPlugin("TAL Chorus-LX (TAL Software)", "Juno-60-style chorus effect", "TAL Software", "Chorus");
+        addPlugin("MicroShift (Soundtoys)", "Stereo widening", "Soundtoys", "Modulation");
+        addPlugin("Phaser BI-TRON (Arturia)", "Analog phaser", "Arturia", "Modulation");
+        addPlugin("Waves NS1 Noise Suppressor", "Noise reduction", "Waves", "Noise Reduction");
+        addPlugin("Waves Clarity Vx", "Noise reduction and vocal processing", "Waves", "De-esser");
+        addPlugin("Waves Curves Equator", "EQ", "Waves", "EQ");
+        addPlugin("Waves Tune Real-Time", "Pitch Correction", "Waves", "Pitch Correction");
+        addPlugin("Melodyne 5 (Celemony)", "Pitch correction", "Celemony", "Pitch Correction");
+        addPlugin("Auto-Tune Pro (Antares)", "Real-time pitch correction", "Antares", "Pitch Correction");
 
-            Plugin newPlugin{pluginName, description, author, category};
-            plugins.push_back(newPlugin);
-            cout << "\n✅ Plugin '" << pluginName << "' added successfully!" << endl;
-        }
-        catch (const invalid_argument& e) {
-            cout << "\n❌ Error: " << e.what() << endl;
-        }
-        catch (const exception& e) {
-            cout << "\n❌ Unexpected error adding plugin: " << e.what() << endl;
-        }
+        // 3. Mixing and Mastering
+        addPlugin("iZotope Ozone", "All-in-one mastering suite", "iZotope", "Mastering");
+        addPlugin("Neutron 4 (iZotope)", "Mixing assistant", "iZotope", "Mixing");
+        addPlugin("FabFilter Pro-L 2 (FabFilter)", "Transparent and powerful limiter", "FabFilter", "Limiting");
+        addPlugin("T-RackS 5 (IK Multimedia)", "Complete mastering and mixing suite", "IK Multimedia", "Mastering");
+        addPlugin("Mastering The Mix EXPOSE 2", "Audio analysis tool", "Mastering The Mix", "Audio Analysis");
+
+        // 4. Special FX & Creative Plugins
+        addPlugin("ShaperBox 3 (Cableguys)", "Time, volume, filter, and distortion modulation tool", "Cableguys", "Special FX");
+        addPlugin("Portal (Output)", "Granular synthesis effect", "Output", "Special FX");
+        addPlugin("Looperator (Sugar Bytes)", "Sequenced multi-effect processor", "Sugar Bytes", "Special FX");
+        addPlugin("VocalSynth 2 (iZotope)", "Vocal processing", "iZotope", "Vocal Processing");
+        addPlugin("Effectrix (Sugar Bytes)", "Multi-effects sequencer", "Sugar Bytes", "Special FX");
+
+        // 5. Utility Plugins
+        addPlugin("SPAN (Voxengo)", "Spectrum analyzer", "Voxengo", "Spectrum Analyzer");
+        addPlugin("Youlean Loudness Meter", "LUFS Metering Tool", "Youlean", "Loudness Meter");
+
+    }
+
+    // Changed addPlugin to take all Plugin members as arguments, which solves the error
+    void addPlugin(const string& pluginName, const string& description, const string& author, const string& category) {
+        Plugin newPlugin{pluginName, description, author, category};
+        plugins.push_back(newPlugin);
+        cout << "\n✅ Plugin '" << pluginName << "' added successfully!" << endl;
     }
 
     void listPlugins() {
-        try {
-            if (plugins.empty()) {
-                throw runtime_error("No plugins available");
-            }
-
-            cout << "\n🎛️ Available Plugins:\n";
-            for (size_t i = 0; i < plugins.size(); ++i) {
-                cout << i + 1 << ". " << plugins.at(i).name << endl;
-                cout << "   Description: " << plugins.at(i).description << endl;
-                cout << "   Author: " << plugins.at(i).author << endl;
-                cout << "   Category: " << plugins.at(i).category << endl;
-            }
+        if (plugins.empty()) {
+            cout << "\n⚠️ No plugins available." << endl;
+            return;
         }
-        catch (const runtime_error& e) {
-            cout << "\n⚠️ " << e.what() << "." << endl;
-        }
-        catch (const out_of_range& e) {
-            cout << "\n❌ Error accessing plugin list: " << e.what() << endl;
+        cout << "\n🎛️ Available Plugins:\n";
+        for (size_t i = 0; i < plugins.size(); ++i) {
+            cout << i + 1 << ". " << plugins.at(i).name << endl;
+            cout << "   Description: " << plugins.at(i).description << endl;
+            cout << "   Author: " << plugins.at(i).author << endl;
+            cout << "   Category: " << plugins.at(i).category << endl;
         }
     }
 
-    void listPluginsByCategory(const string& category) {
-        try {
-            vector<Plugin> categoryPlugins;
-            for (const auto& plugin : plugins) {
-                if (plugin.category == category) {
-                    categoryPlugins.push_back(plugin);
-                }
-            }
-            if (categoryPlugins.empty()) {
-                throw runtime_error("No plugins found in category '" + category + "'");
-            }
+    void suggestPlugins(const string& userNeed) {
+        cout << "\nAnalyzing your needs..." << endl;
+        string lowerNeed = userNeed;
+        transform(lowerNeed.begin(), lowerNeed.end(), lowerNeed.begin(), ::tolower);
 
-            cout << "\n🎛️ Plugins in category '" << category << "':\n";
-            for (size_t i = 0; i < categoryPlugins.size(); ++i) {
-                cout << i + 1 << ". " << categoryPlugins.at(i).name << endl;
-                cout << "   Description: " << categoryPlugins.at(i).description << endl;
-                cout << "   Author: " << categoryPlugins.at(i).author << endl;
+        vector<string> suggestions;
+        for (const auto& [functionality, pluginNames] : functionalityToPlugins) {
+            string lowerFunctionality = functionality;
+            transform(lowerFunctionality.begin(), lowerFunctionality.end(), lowerFunctionality.begin(), ::tolower);
+            if (lowerNeed.find(lowerFunctionality) != string::npos) {
+                suggestions.insert(suggestions.end(), pluginNames.begin(), pluginNames.end());
             }
         }
-        catch (const runtime_error& e) {
-            cout << "\n⚠️ " << e.what() << "." << endl;
-        }
-        catch (const exception& e) {
-            cout << "\n❌ Error: " << e.what() << endl;
-        }
-    }
 
-    void loadPlugin(int pluginIndex) {
-        try {
-            if (pluginIndex < 1 || pluginIndex > static_cast<int>(plugins.size())) {
-                throw out_of_range("Invalid plugin index: " + to_string(pluginIndex));
-            }
-            cout << "\n🔊 Applying '" << plugins.at(pluginIndex - 1).name << "' effect..." << endl;
+        if (suggestions.empty()) {
+            cout << "No matching plugins found based on your description." << endl;
+            return;
         }
-        catch (const out_of_range& e) {
-            cout << "\n❌ " << e.what() << "!" << endl;
-        }
-    }
 
-    void removePlugin(int pluginIndex) {
-        try {
-            if (pluginIndex < 1 || pluginIndex > static_cast<int>(plugins.size())) {
-                throw out_of_range("Invalid plugin index: " + to_string(pluginIndex));
-            }
-            cout << "\n🗑️ Removing plugin: " << plugins.at(pluginIndex - 1).name << endl;
-            plugins.erase(plugins.begin() + (pluginIndex - 1));
-        }
-        catch (const out_of_range& e) {
-            cout << "\n❌ " << e.what() << "!" << endl;
+        cout << "Based on your needs, you might consider these plugins:" << endl;
+        for (const string& pluginName : suggestions) {
+            cout << " - " << pluginName << endl;
         }
     }
 };
@@ -123,11 +155,9 @@ public:
 int displayMenu() {
     int choice;
     cout << "\n🎵 Plugin Manager Menu 🎵" << endl;
-    cout << "1️⃣ Add Plugin" << endl;
-    cout << "2️⃣ List Plugins" << endl;
-    cout << "3️⃣ Load Plugin" << endl;
-    cout << "4️⃣ Remove Plugin" << endl;
-    cout << "5️⃣ Exit" << endl;
+    cout << "1.List Plugins" << endl;
+    cout << "2.Suggest Plugin" << endl;
+    cout << "3.Exit" << endl;
     cout << "Enter your choice: ";
     cin >> choice;
     return choice;
@@ -136,84 +166,30 @@ int displayMenu() {
 int main() {
     PluginManager manager;
     string pluginName;
+    int choice;
 
-    try {
-        // Example plugin data with exception handling
-        manager.addPlugin("Izotope Ozone");
-        manager.addPlugin("Serum");
-        manager.addPlugin("FabFilter Pro-Q 3");
+    while (true) {
+        choice = displayMenu();
 
-        while (true) {
-            int choice = displayMenu();
-
-            switch (choice) {
-                case 1:
-                    cout << "\nEnter Plugin Name: ";
-                    cin.ignore();
-                    getline(cin, pluginName);
-                    manager.addPlugin(pluginName);
-                    break;
-
-                case 2: {
-                    int listChoice;
-                    cout << "\n1. List All Plugins\n2. List Plugins by Category: ";
-                    if (!(cin >> listChoice)) {
-                        cin.clear();
-                        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                        throw runtime_error("Invalid input for list choice");
-                    }
-
-                    if (listChoice == 1) {
-                        manager.listPlugins();
-                    } else if (listChoice == 2) {
-                        string category;
-                        cin.ignore();
-                        cout << "Enter Category: ";
-                        getline(cin, category);
-                        manager.listPluginsByCategory(category);
-                    } else {
-                        throw invalid_argument("Invalid list option");
-                    }
-                    break;
-                }
-
-                case 3: {
-                    int index;
-                    manager.listPlugins();
-                    cout << "\nEnter Plugin Number to Load: ";
-                    if (!(cin >> index)) {
-                        cin.clear();
-                        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                        throw runtime_error("Invalid input for plugin number");
-                    }
-                    manager.loadPlugin(index);
-                    break;
-                }
-
-                case 4: {
-                    int index;
-                    manager.listPlugins();
-                    cout << "\nEnter Plugin Number to Remove: ";
-                    if (!(cin >> index)) {
-                        cin.clear();
-                        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                        throw runtime_error("Invalid input for plugin number");
-                    }
-                    manager.removePlugin(index);
-                    break;
-                }
-
-                case 5:
-                    cout << "\n👋 Exiting Plugin Manager...\n";
-                    return 0;
-
-                default:
-                    throw invalid_argument("Invalid menu choice");
-            }
+        switch (choice) {
+            case 1:
+                // Manual addition is disabled, handled in the constructor
+                cout << "Adding plugins manually is disabled. Please select Suggest Plugin or Exit." << endl;
+                break;
+            case 2:
+                manager.listPlugins();
+                break;
+            case 3:
+                cin.ignore(); // Consume the newline
+                cout << "Enter the reason why you need a plugin: ";
+                getline(cin, pluginName);
+                manager.suggestPlugins(pluginName);
+                break;
+            case 4:
+                cout << "\n Exiting Plugin Manager...\n";
+                return 0;
+            default:
+                cout << "Invalid choice. Please try again." << endl;
         }
-    }
-    catch (const exception& e) {
-        cout << "\n❌ Fatal error: " << e.what() << endl;
-        return 1;
     }
 }
