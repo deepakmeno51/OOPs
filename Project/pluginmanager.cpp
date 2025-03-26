@@ -1,28 +1,336 @@
-#include <iostream> // Include for standard input/output operations (e.g., cout, cin)
-#include <vector>  // Include for using dynamic arrays (vectors)
-#include <string>  // Include for using strings
-#include <algorithm> // Include for using algorithms like `transform` (for lowercasing)
-#include <stdexcept> // Include for exception handling (e.g., `invalid_argument`)
-#include <map>       // Include for using maps (key-value pairs) - used for plugin suggestions
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <stdexcept>
+#include <map>
 
-using namespace std; // Use the standard namespace to avoid repeatedly typing std::
+using namespace std;
 
+// --- Forward Declarations ---
+class PluginManager; // Required for friend class declarations
+class User;
 // --- Plugin Structure ---
-
-// Structure to represent a plugin.  Holds information about a single plugin.
 struct Plugin {
-    string name;          // Plugin's name (e.g., "FabFilter Pro-Q 3")
-    string description;   // Brief description of the plugin's function
-    string author;        // The plugin's author or developer
-    string category;      // The plugin's category (e.g., "EQ", "Reverb")
+    string name;
+    string description;
+    string author;
+    string category;
+
+    // Constructors
+    Plugin() : name(""), description(""), author(""), category("") {}  // Default constructor
+    Plugin(const string& name, const string& description, const string& author, const string& category)
+        : name(name), description(description), author(author), category(category) {} // Parameterized Constructor
+    Plugin(const Plugin& other) : name(other.name), description(other.description), author(other.author), category(other.category) {} // Copy Constructor
+
+    //Destructor (Optional, but good practice)
+    ~Plugin() {}
 };
 
-// --- Plugin Manager Class ---
+// --- User Roles (Abstract Base Class and Derived Classes) ---
+class User {
+public:
+    string username;
+
+    // --- Access Specifiers ---
+    // Member variables (public - accessible from anywhere)
+    // virtual to allow method overriding
+    virtual string getRole() const = 0;    // Pure virtual function (abstract method)
+    virtual bool canBook() const = 0;
+    virtual bool canCancel() const = 0;
+    virtual bool canList() const = 0;
+    virtual bool isAdmin() const = 0;
+    virtual ~User() {}                     // Virtual Destructor
+    // --- Abstraction and Encapsulation: User hides implementation details.
+    // --- Member variables and function.
+    User(const string& name) : username(name) {} // Constructor
+    // --- Virtual Function and Polymorphism
+    virtual void displayPermissions() const = 0; // Pure virtual to be implemented by derived classes
+};
+// Polymorphism: Different roles behave differently.
+
+class Artist : public User {  // Base and derived classes
+public:
+    Artist(const string& name) : User(name) {}
+    string getRole() const override { return "Artist"; }
+    bool canBook() const override { return true; }
+    bool canCancel() const override { return true; }
+    bool canList() const override { return true; }
+    bool isAdmin() const override { return false; }
+    // --- Method Overriding ---
+    void displayPermissions() const override {
+        cout << "  - Book: Yes" << endl;
+        cout << "  - Cancel: Yes" << endl;
+        cout << "  - List: Yes" << endl;
+    }
+};
+
+class Producer : public User {
+public:
+    Producer(const string& name) : User(name) {}
+    string getRole() const override { return "Producer"; }
+    bool canBook() const override { return true; }
+    bool canCancel() const override { return true; }
+    bool canList() const override { return true; }
+    bool isAdmin() const override { return false; }
+    void displayPermissions() const override {
+        cout << "  - Book: Yes" << endl;
+        cout << "  - Cancel: Yes" << endl;
+        cout << "  - List: Yes" << endl;
+    }
+};
+
+class Engineer : public User {
+public:
+    Engineer(const string& name) : User(name) {}
+    string getRole() const override { return "Engineer"; }
+    bool canBook() const override { return false; }
+    bool canCancel() const override { return false; }
+    bool canList() const override { return true; }
+    bool isAdmin() const override { return false; }
+    void displayPermissions() const override {
+        cout << "  - Book: No" << endl;
+        cout << "  - Cancel: No" << endl;
+        cout << "  - List: Yes" << endl;
+    }
+};
+
+class Admin : public User {
+public:
+    Admin(const string& name) : User(name) {}
+    string getRole() const override { return "Admin"; }
+    bool canBook() const override { return true; }
+    bool canCancel() const override { return true; }
+    bool canList() const override { return true; }
+    bool isAdmin() const override { return true; }
+    void displayPermissions() const override {
+        cout << "  - Book: Yes" << endl;
+        cout << "  - Cancel: Yes" << endl;
+        cout << "  - List: Yes" << endl;
+        cout << "  - Admin: Yes" << endl;
+    }
+};
+
+// --- Access Control Manager ---
+class AccessControlManager {
+private:
+    User* currentUser = nullptr;
+    const string userFile = "users.txt";
+
+    struct UserData {
+        string username;
+        string password;
+        string role;
+    };
+
+    // Load users from file
+    vector<UserData> loadUsers() const {
+        vector<UserData> users;
+        ifstream file(userFile);
+        if (file.is_open()) {
+            string line;
+            while (getline(file, line)) {
+                stringstream ss(line);
+                UserData userData;
+                getline(ss, userData.username, ',');
+                getline(ss, userData.password, ',');
+                getline(ss, userData.role, ',');
+                users.push_back(userData);
+            }
+            file.close();
+        }
+        return users;
+    }
+
+    // Save users to file
+    void saveUsers(const vector<UserData>& users) {
+        ofstream file(userFile);
+        if (file.is_open()) {
+            for (const auto& user : users) {
+                file << user.username << "," << user.password << "," << user.role << endl;
+            }
+            file.close();
+        }
+    }
+
+    User* authenticate(const string& username, const string& password) {
+        vector<UserData> users = loadUsers();
+        for (const auto& user : users) {
+            if (user.username == username && user.password == password) {
+                if (user.role == "Artist") return new Artist(username);
+                if (user.role == "Producer") return new Producer(username);
+                if (user.role == "Engineer") return new Engineer(username);
+                if (user.role == "Admin") return new Admin(username);
+            }
+        }
+        return nullptr;
+    }
+
+public:
+    // Constructor - Creates users.txt if it doesn't exist
+    AccessControlManager() {
+        ifstream file(userFile);
+        if (!file.is_open()) {
+            ofstream createFile(userFile); // Create an empty file
+            if (createFile.is_open()) {
+                createFile.close();
+            } else {
+                cerr << "Error: Could not create user file." << endl; // Handle the error
+            }
+        }
+    }
+
+    // Function to register a user
+    void registerUser() {
+        string username, password, confirmPassword, role;
+        cout << "\n--- New User Registration ---" << endl;
+        cout << "Enter Username: ";
+        cin >> username;
+
+        vector<UserData> users = loadUsers();
+        for (const auto& user : users) {
+            if (user.username == username) {
+                cout << "Username already exists." << endl;
+                return;
+            }
+        }
+
+        // Password Input with Masking and Confirmation
+        do {
+            password = "";
+            confirmPassword = "";
+            char ch;
+            cout << "Enter Password: ";
+            while ((ch = getch()) != '\r') { // '\r' is the Enter key
+                if (ch == '\b') { // Backspace
+                    if (!password.empty()) {
+                        cout << "\b \b"; // Erase the '*' from console
+                        password.pop_back();
+                    }
+                }
+                else {
+                    cout << '*';
+                    password += ch;
+                }
+            }
+            cout << endl;
+
+            cout << "Confirm Password: ";
+            while ((ch = getch()) != '\r') { // '\r' is the Enter key
+                if (ch == '\b') { // Backspace
+                    if (!confirmPassword.empty()) {
+                        cout << "\b \b"; // Erase the '*' from console
+                        confirmPassword.pop_back();
+                    }
+                } else {
+                    cout << '*';
+                    confirmPassword += ch;
+                }
+            }
+            cout << endl;
+
+            if (password != confirmPassword) {
+                cout << "Passwords do not match. Please re-enter." << endl;
+            }
+        } while (password != confirmPassword);
+
+        cout << "Enter Role (Artist/Producer/Engineer): ";
+        cin >> role;
+        // Validate role input
+        if (role != "Artist" && role != "Producer" && role != "Engineer") {
+            cout << "Invalid role. Registration cancelled." << endl;
+            return;
+        }
+
+        users.push_back({username, password, role});
+        saveUsers(users);
+        cout << "User registered successfully as " << role << "." << endl;
+    }
+
+    void login() {
+        string username, password;
+        cout << "\n--- Login ---" << endl;
+        cout << "Enter Username: ";
+        cin >> username;
+        cout << "Enter Password: ";
+
+        // Password Input with Masking
+        password = "";
+        char ch;
+        while ((ch = getch()) != '\r') { // '\r' is the Enter key
+            if (ch == '\b') { // Backspace
+                if (!password.empty()) {
+                    cout << "\b \b"; // Erase the '*' from console
+                    password.pop_back();
+                }
+            } else {
+                cout << '*';
+                password += ch;
+            }
+        }
+        cout << endl;
+
+        User* user = authenticate(username, password);
+        if (user) {
+            delete currentUser;
+            currentUser = user;
+            cout << "Login Successful! Welcome, " << currentUser->username << " (" << currentUser->getRole() << ")" << endl;
+        } else {
+            cout << "Login Failed." << endl;
+        }
+    }
+
+    // Function to list registered users
+    void listRegisteredUsers() const {
+        vector<UserData> users = loadUsers();
+        if (users.empty()) {
+            cout << "No users registered yet." << endl;
+            return;
+        }
+
+        cout << "\n--- Registered Users ---" << endl;
+        for (const auto& user : users) {
+            cout << "Username: " << user.username << ", Role: " << user.role << endl;
+        }
+    }
+
+    void logout() {
+        delete currentUser;
+        currentUser = nullptr;
+        cout << "Logged out." << endl;
+    }
+
+    // Check if a user has permission to perform an action
+    bool hasPermission(const string& action) const {
+        if (!currentUser) {
+            cout << "Not logged in." << endl;
+            return false;
+        }
+        if (action == "book") return currentUser->canBook();
+        if (action == "cancel") return currentUser->canCancel();
+        if (action == "list") return currentUser->canList();
+        if (action == "isAdmin") return currentUser->isAdmin(); // Check admin status
+        return false; // Unknown action or no permission
+    }
+
+    User* getCurrentUser() const {
+        return currentUser;
+    }
+
+    ~AccessControlManager() {
+        delete currentUser;
+    }
+};
+
+// --- PluginManager Class ---
+
+// --- Friend Class Declarations for Accessing Private Members ---
 class PluginManager {
 private:
-    vector<Plugin> plugins; // Vector to store all the Plugin objects. This is the list of plugins.
+    vector<Plugin> plugins;
 
-    // A map to link functionalities (keywords) to plugin names (for suggestions).
+    // A map to link functionalities to plugin names (for suggestions)
     map<string, vector<string>> functionalityToPlugins = {
         {"EQ", {"FabFilter Pro-Q 3", "SSL Native X-EQ 2", "Maag EQ4"}},
         {"Compression", {"FabFilter Pro-C 2", "Waves CLA-76", "Tube-Tech CL 1B", "OTT (Xfer Records)"}},
@@ -47,11 +355,11 @@ private:
         {"Mixing", {"Neutron 4 (iZotope)"}},
         {"Audio Analysis", {"Mastering The Mix EXPOSE 2"}},
         {"Special FX", {"ShaperBox 3", "Portal (Output)", "Looperator (Sugar Bytes)", "Effectrix (Sugar Bytes)"}}
-
     };
+    // --- Abstraction --- Hiding implementation details of plugin management.
 
 public:
-    // Constructor - Adds the predefined plugins.
+    // Constructor - Adds the predefined plugins
     PluginManager() {
         //  1. Instruments
         addPlugin("Serum (Xfer Records)", "Wavetable synthesizer", "Xfer Records", "Synthesizer");
@@ -110,53 +418,48 @@ public:
     }
 
     // Changed addPlugin to take all Plugin members as arguments, which solves the error
-    void addPlugin(const string& pluginName, const string& description, const string& author, const string& category) {
-        // This add plugin functionality is redundant with the automatic initialization of plugins.
-        // It's left here for compatibility, but will not be used.  You can remove it.
-        // This is now used only for adding the plugins that have been created
+    void addPlugin(const string& pluginName, const string& description, const string& author, const string& category) { // Parameterized Constructor
         Plugin newPlugin{pluginName, description, author, category};
         plugins.push_back(newPlugin);
         cout << "\n✅ Plugin '" << pluginName << "' added successfully!" << endl;
     }
 
-    // Function to list the available plugins
     void listPlugins() {
         if (plugins.empty()) {
-            cout << "\n⚠️ No plugins available." << endl;  // Display a message if there are no plugins to list
-            return; // Exit the function if there are no plugins
+            cout << "\n⚠️ No plugins available." << endl;
+            return;
         }
-        cout << "\n🎛️ Available Plugins:\n"; // Print the header for listing the plugins
-        for (size_t i = 0; i < plugins.size(); ++i) {  // Loop through the plugins vector
-            cout << i + 1 << ". " << plugins.at(i).name << endl; // Print the plugin name with an index
-            cout << "   Description: " << plugins.at(i).description << endl; // Print the plugin's description
-            cout << "   Author: " << plugins.at(i).author << endl; // Print the plugin's author
-            cout << "   Category: " << plugins.at(i).category << endl; // Print the plugin's category
+        cout << "\n🎛️ Available Plugins:\n";
+        for (size_t i = 0; i < plugins.size(); ++i) {
+            cout << i + 1 << ". " << plugins.at(i).name << endl;
+            cout << "   Description: " << plugins.at(i).description << endl;
+            cout << "   Author: " << plugins.at(i).author << endl;
+            cout << "   Category: " << plugins.at(i).category << endl;
         }
     }
 
-    // Function to suggest plugins based on a user's description of their needs
     void suggestPlugins(const string& userNeed) {
-        cout << "\nAnalyzing your needs..." << endl; // Inform the user that the system is analyzing
+        cout << "\nAnalyzing your needs..." << endl;
         string lowerNeed = userNeed;
-        transform(lowerNeed.begin(), lowerNeed.end(), lowerNeed.begin(), ::tolower); // Convert the user's input to lowercase for case-insensitive matching
+        transform(lowerNeed.begin(), lowerNeed.end(), lowerNeed.begin(), ::tolower);
 
-        vector<string> suggestions; // Vector to store suggested plugin names
-        for (const auto& [functionality, pluginNames] : functionalityToPlugins) { // Loop through the functionalityToPlugins map
+        vector<string> suggestions;
+        for (const auto& [functionality, pluginNames] : functionalityToPlugins) {
             string lowerFunctionality = functionality;
-            transform(lowerFunctionality.begin(), lowerFunctionality.end(), lowerFunctionality.begin(), ::tolower); // Convert the functionality keyword to lowercase
-            if (lowerNeed.find(lowerFunctionality) != string::npos) { // Check if the user's need contains the functionality keyword
-                suggestions.insert(suggestions.end(), pluginNames.begin(), pluginNames.end()); // Add the plugin names associated with the functionality to suggestions
+            transform(lowerFunctionality.begin(), lowerFunctionality.end(), lowerFunctionality.begin(), ::tolower);
+            if (lowerNeed.find(lowerFunctionality) != string::npos) {
+                suggestions.insert(suggestions.end(), pluginNames.begin(), pluginNames.end());
             }
         }
 
-        if (suggestions.empty()) { // If no suggestions were found
-            cout << "No matching plugins found based on your description." << endl; // Print a message
-            return; // Exit the function
+        if (suggestions.empty()) {
+            cout << "No matching plugins found based on your description." << endl;
+            return;
         }
 
-        cout << "Based on your needs, you might consider these plugins:" << endl; // Print a header for the suggested plugins
-        for (const string& pluginName : suggestions) { // Loop through the suggestions
-            cout << " - " << pluginName << endl; // Print each suggested plugin
+        cout << "Based on your needs, you might consider these plugins:" << endl;
+        for (const string& pluginName : suggestions) {
+            cout << " - " << pluginName << endl;
         }
     }
 };
@@ -165,37 +468,43 @@ public:
 int displayMenu() {
     int choice;
     cout << "\n🎵 Plugin Manager Menu 🎵" << endl;
-    cout << "1️⃣ List Plugins" << endl;
-    cout << "2️⃣ Suggest Plugin" << endl;
-    cout << "3️⃣ Exit" << endl;
+    cout << "1️⃣ Add Plugin" << endl; // This functionality is now disabled, but left for menu structure.
+    cout << "2️⃣ List Plugins" << endl;
+    cout << "3️⃣ Suggest Plugin" << endl;
+    cout << "4️⃣ Exit" << endl;
     cout << "Enter your choice: ";
-    cin >> choice; // Get user's menu choice
-    return choice; // Return the choice
+    cin >> choice;
+    return choice;
 }
 
 int main() {
-    PluginManager manager;  // Create an instance of the PluginManager class
-    string pluginName; // Stores the plugin name
-    int choice;      // Stores the user's menu choice
+    AccessControlManager accessControl;  // Create Access Control Manager
+    //  Class and Object
+    PluginManager manager; // Create a PluginManager object (This *now* automatically loads plugins).
+    string pluginName;  // For user input
+    int choice;         // For menu choice
 
-    while (true) { // Main program loop - continues until the user chooses to exit
+    while (true) { // Main program loop
         choice = displayMenu(); // Display the menu and get the user's choice
 
-        switch (choice) { // Process user's choice using a switch statement
-            case 1:
-                manager.listPlugins(); // Call the listPlugins() method to display plugins
+        switch (choice) {
+            case 1: // Add Plugin (disabled)
+                cout << "Adding plugins manually is disabled. Please select Suggest Plugin or Exit." << endl;
                 break;
-            case 2:
-                cin.ignore(); // Consume the newline character left in the input buffer
-                cout << "Enter the reason why you need a plugin: "; // Prompt the user to enter the reason
-                getline(cin, pluginName); // Read the user's need (can include spaces)
-                manager.suggestPlugins(pluginName); // Call the suggestPlugins() method to provide plugin suggestions
+            case 2: // List Plugins
+                manager.listPlugins();
                 break;
-            case 3:
-                cout << "\n👋 Exiting Plugin Manager...\n"; // Display exit message
-                return 0; // Exit the program with a success code
+            case 3: // Suggest Plugin
+                cin.ignore(); // Consume the newline character
+                cout << "Enter the reason why you need a plugin: ";
+                getline(cin, pluginName);
+                manager.suggestPlugins(pluginName);
+                break;
+            case 4: // Exit
+                cout << "\n👋 Exiting Plugin Manager...\n";
+                return 0; // Exit the program
             default:
-                cout << "Invalid choice. Please try again." << endl; // Handle invalid menu choices
+                cout << "Invalid choice. Please try again." << endl;
         }
     }
 }
