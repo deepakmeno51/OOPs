@@ -1,294 +1,316 @@
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <string>
-#include <algorithm>
-#include <sstream>
-#include <utility>
-#include <ctime>
-#include <iomanip>
+#include <iostream> // For input/output operations (e.g., cout, cin)
+#include <fstream> // For file input/output operations (reading and writing)
+#include <vector>  // For using dynamic arrays (vectors)
+#include <string>  // For using strings
+#include <algorithm> // For algorithms like `remove_if`
+#include <sstream>   // For string stream operations (parsing strings)
+#include <utility>   // For using `std::pair`
+#include <ctime>     // For date and time operations
+#include <iomanip>   // For output formatting (e.g., setting precision)
 
-using namespace std;
+// Conditional inclusion for getch() - handles both Windows and Unix-like systems
+#ifdef _WIN32
+#include <conio.h> // For _getch() on Windows (non-standard)
+#define getch _getch // Define getch to be _getch on Windows
+#else
+#include <termios.h> // For getch() on Unix-like systems (Linux, macOS)
+#include <unistd.h>
+#include <stdio.h> // Required for getchar() in the Linux getch implementation (for getch())
 
-// Forward Declarations
-class StudioScheduler;
+char getch() {
+    int ch;
+    struct termios oldt, newt;
 
+    tcgetattr(STDIN_FILENO, &oldt); // Save current terminal settings
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO); // Turn off canonical mode and echoing
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt); // Apply new settings
+
+    ch = getchar(); // Read a character (no echo)
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt); // Restore old settings
+    return (char)ch;
+}
+
+#endif
+
+using namespace std; // Use the standard namespace
+
+// --- User Roles ---
+
+// Abstract base class for users. Defines the common interface for all user roles.
 class User {
 public:
-    string username;
-    virtual string getRole() const = 0;
-    virtual bool canBook() const = 0;
-    virtual bool canCancel() const = 0;
-    virtual bool canList() const = 0;
-    virtual ~User() {}
+    string username;                      // User's username
+    virtual string getRole() const = 0;    // Pure virtual function to get the user's role (e.g., "Artist")
+    virtual bool canBook() const = 0;    // Pure virtual function: Can the user book?
+    virtual bool canCancel() const = 0;  // Pure virtual function: Can the user cancel?
+    virtual bool canList() const = 0;    // Pure virtual function: Can the user list?
+    virtual bool isAdmin() const = 0;   // Pure virtual function: Is the user an admin?
+    virtual ~User() {}                   // Virtual destructor for proper cleanup (polymorphism)
+    User(const string& name) : username(name) {} // Constructor to initialize username
 };
 
+// Concrete user role: Artist
 class Artist : public User {
 public:
-    Artist(const string& name) { username = name; }
+    Artist(const string& name) : User(name) {} // Constructor: calls the User constructor
     string getRole() const override { return "Artist"; }
     bool canBook() const override { return true; }
     bool canCancel() const override { return true; }
     bool canList() const override { return true; }
+    bool isAdmin() const override { return false; }
 };
 
+// Concrete user role: Producer
 class Producer : public User {
 public:
-    Producer(const string& name) { username = name; }
+    Producer(const string& name) : User(name) {} // Constructor: calls the User constructor
     string getRole() const override { return "Producer"; }
     bool canBook() const override { return true; }
     bool canCancel() const override { return true; }
     bool canList() const override { return true; }
+    bool isAdmin() const override { return false; }
 };
 
+// Concrete user role: Engineer
 class Engineer : public User {
 public:
-    Engineer(const string& name) { username = name; }
+    Engineer(const string& name) : User(name) {} // Constructor: calls the User constructor
     string getRole() const override { return "Engineer"; }
-    bool canBook() const override { return false; }
-    bool canCancel() const override { return false; }
-    bool canList() const override { return true; }
+    bool canBook() const override { return false; } // Engineers cannot book
+    bool canCancel() const override { return false; } // Engineers cannot cancel
+    bool canList() const override { return true; }    // Engineers can list
+    bool isAdmin() const override { return false; }
 };
 
-class StudioScheduler {
+// Concrete user role: Admin
+class Admin : public User {
+public:
+    Admin(const string& name) : User(name) {} // Constructor: calls the User constructor
+    string getRole() const override { return "Admin"; }
+    bool canBook() const override { return true; }     // Admins can book
+    bool canCancel() const override { return true; }   // Admins can cancel
+    bool canList() const override { return true; }     // Admins can list
+    bool isAdmin() const override { return true; }    // Admins are admins
+};
+
+// --- Access Control Manager ---
+class AccessControlManager {
 private:
-    struct Booking {
-        string artist;
-        string date;
-        string time;
-        double price;
+    User* currentUser = nullptr;    // Pointer to the currently logged-in user
+    const string userFile = "users.txt"; // Name of the file to store user data
+
+    // Structure to hold user data (username, password, role)
+    struct UserData {
+        string username;
+        string password;
+        string role;
     };
 
-    vector<Booking> bookings;
-    const string filename = "bookings.txt";
-    User* currentUser = nullptr;
-
-    bool isWeekend(const string& date) {
-        if (date.length() != 10 || date[4] != '-' || date[7] != '-') {
-            return false;
-        }
-        int year, month, day;
-        sscanf(date.c_str(), "%d-%d-%d", &year, &month, &day);
-        if (month < 3) {
-            month += 12;
-            year--;
-        }
-        int dayOfWeek = (day + 2 * month + 3 * (month + 1) / 5 + year + year / 4 - year / 100 + year / 400 + 2) % 7;
-        return (dayOfWeek == 0 || dayOfWeek == 6);
-    }
-
-    double getHoursFromTime(const string& time) {
-        size_t dash = time.find(" - ");
-        if (dash == string::npos) return 0.0;
-        string start = time.substr(0, dash);
-        string end = time.substr(dash + 3);
-        int startHour, startMinute, endHour, endMinute;
-        sscanf(start.c_str(), "%d:%d", &startHour, &startMinute);
-        sscanf(end.c_str(), "%d:%d", &endHour, &endMinute);
-        double duration = (endHour + endMinute / 60.0) - (startHour + startMinute / 60.0);
-        return (duration < 0) ? 0 : duration;
-    }
-
-    void saveToFile() {
-        ofstream file(filename);
+    // Helper function to load user credentials from the user file
+    vector<UserData> loadUsers() const {
+        vector<UserData> users;
+        ifstream file(userFile); // Open the user file for reading
         if (file.is_open()) {
-            for (const auto& booking : bookings) {
-                file << booking.artist << "," << booking.date << "," << booking.time << "," << fixed << setprecision(2) << booking.price << endl;
-            }
-            file.close();
-        }
-    }
-
-    void loadFromFile() {
-        ifstream file(filename);
-        if (file.is_open()) {
-            bookings.clear();
             string line;
-            while (getline(file, line)) {
-                size_t pos1 = line.find(','), pos2 = line.find(',', pos1 + 1), pos3 = line.find(',', pos2 + 1);
-                if (pos1 != string::npos && pos2 != string::npos && pos3 != string::npos) {
-                    string artist = line.substr(0, pos1);
-                    string date = line.substr(pos1 + 1, pos2 - pos1 - 1);
-                    string time = line.substr(pos2 + 1, pos3 - pos2 - 1);
-                    double price = stod(line.substr(pos3 + 1));
-                    bookings.push_back({artist, date, time, price});
-                }
+            while (getline(file, line)) { // Read the file line by line
+                stringstream ss(line);       // Create a stringstream to parse the line
+                UserData userData;            // Create a UserData object
+                getline(ss, userData.username, ','); // Extract the username (up to the first comma)
+                getline(ss, userData.password, ','); // Extract the password (up to the second comma)
+                getline(ss, userData.role, ',');     // Extract the role (up to the end of the line)
+                users.push_back(userData); // Add the extracted user data to the vector
             }
-            file.close();
+            file.close(); // Close the file
+        }
+        return users; // Return the vector of user data
+    }
+
+    // Helper function to save user credentials to the user file
+    void saveUsers(const vector<UserData>& users) {
+        ofstream file(userFile); // Open the user file for writing (overwrite if it exists)
+        if (file.is_open()) {
+            for (const auto& user : users) { // Iterate through the users vector
+                file << user.username << "," << user.password << "," << user.role << endl; // Write user data to the file, comma separated
+            }
+            file.close(); // Close the file
         }
     }
 
-    pair<int, int> extractTimeRange(const string& timeSlot) {
-        int startHour = -1;
-        int endHour = -1;
-        stringstream ss(timeSlot);
-        string token;
-        vector<string> tokens;
-        while (getline(ss, token, ' ')) {
-            tokens.push_back(token);
-        }
-        if (tokens.size() >= 3) {
-            string startTime = tokens[0];
-            string endTime = tokens[2];
-            size_t colonPos1 = startTime.find(':');
-            if (colonPos1 != string::npos) {
-                startHour = stoi(startTime.substr(0, colonPos1));
-            }
-            size_t colonPos2 = endTime.find(':');
-            if (colonPos2 != string::npos) {
-                endHour = stoi(endTime.substr(0, colonPos2));
+    // Helper function to authenticate a user
+    User* authenticate(const string& username, const string& password) {
+        vector<UserData> users = loadUsers(); // Load users from the file
+        for (const auto& user : users) {      // Iterate through the users
+            if (user.username == username && user.password == password) { // Check for matching username and password
+                // Create and return a User object based on the user's role
+                if (user.role == "Artist") return new Artist(username);
+                if (user.role == "Producer") return new Producer(username);
+                if (user.role == "Engineer") return new Engineer(username);
+                if (user.role == "Admin") return new Admin(username);
             }
         }
-        return make_pair(startHour, endHour);
-    }
-
-    pair<string, string> findNextAvailableSlot(const string& requestedDate, const string& requestedTime) {
-        pair<string, string> nextSlot = make_pair("", "");
-
-        auto requestedTimeRange = extractTimeRange(requestedTime);
-        int requestedStartHour = requestedTimeRange.first;
-        int requestedEndHour = requestedTimeRange.second;
-
-        if (requestedStartHour == -1 || requestedEndHour == -1) {
-            return nextSlot; // Invalid time format
-        }
-
-        int nextStartHour = requestedEndHour;
-        int nextEndHour = requestedEndHour + 2; // Assuming bookings are in 2-hour blocks
-
-        string nextStartTime = to_string(nextStartHour) + ":00";
-        string nextEndTime = to_string(nextEndHour) + ":00";
-        string nextTimeSlot = nextStartTime + " - " + nextEndTime;
-
-        if (isAvailable(requestedDate, nextTimeSlot)) {
-            nextSlot = make_pair(requestedDate, nextTimeSlot);
-        }
-        return nextSlot;
+        return nullptr; // Authentication failed
     }
 
 public:
-    StudioScheduler() {
-        loadFromFile();
+    // Constructor - Creates users.txt if it doesn't exist and checks for admin
+    AccessControlManager() {
+        // Check if the user file exists. If not, create it.
+        ifstream file(userFile);
+        if (!file.is_open()) {
+            ofstream createFile(userFile); // Create an empty file
+            if (createFile.is_open()) {
+                createFile.close();
+            } else {
+                cerr << "Error: Could not create user file." << endl; // Handle the error
+            }
+        }
     }
 
-    ~StudioScheduler() {  // Added destructor to clean up currentUser
+    // Function to register a user
+    void registerUser() {
+        string username, password, confirmPassword, role;
+        cout << "\n--- New User Registration ---" << endl;
+        cout << "Enter Username: ";
+        cin >> username;
+
+        vector<UserData> users = loadUsers();
+        for (const auto& user : users) {
+            if (user.username == username) {
+                cout << "Username already exists." << endl;
+                return;
+            }
+        }
+
+        // Password Input with Masking and Confirmation
+        do {
+            password = "";
+            confirmPassword = "";
+            char ch;
+            cout << "Enter Password: ";
+            while ((ch = getch()) != '\r') { // '\r' is the Enter key
+                if (ch == '\b') { // Backspace
+                    if (!password.empty()) {
+                        cout << "\b \b"; // Erase the '*' from console
+                        password.pop_back();
+                    }
+                }
+                else {
+                    cout << '*';
+                    password += ch;
+                }
+            }
+            cout << endl;
+
+            cout << "Confirm Password: ";
+            while ((ch = getch()) != '\r') { // '\r' is the Enter key
+                if (ch == '\b') { // Backspace
+                    if (!confirmPassword.empty()) {
+                        cout << "\b \b"; // Erase the '*' from console
+                        confirmPassword.pop_back();
+                    }
+                } else {
+                    cout << '*';
+                    confirmPassword += ch;
+                }
+            }
+            cout << endl;
+
+            if (password != confirmPassword) {
+                cout << "Passwords do not match. Please re-enter." << endl;
+            }
+        } while (password != confirmPassword);
+
+         // Determine the role based on the current state
+         role = "Artist"; // Default role
+        vector<UserData> users = loadUsers();
+        users.push_back({username, password, role});
+        saveUsers(users);
+        cout << "User registered successfully as " << role << "." << endl;
+    }
+
+    void login() {
+        string username, password;
+        cout << "\n--- Login ---" << endl;
+        cout << "Enter Username: ";
+        cin >> username;
+        cout << "Enter Password: ";
+
+        // Password Input with Masking
+        password = "";
+        char ch;
+        while ((ch = getch()) != '\r') { // '\r' is the Enter key
+            if (ch == '\b') { // Backspace
+                if (!password.empty()) {
+                    cout << "\b \b"; // Erase the '*' from console
+                    password.pop_back();
+                }
+            } else {
+                cout << '*';
+                password += ch;
+            }
+        }
+        cout << endl;
+
+        User* user = authenticate(username, password);
+        if (user) {
+            delete currentUser;
+            currentUser = user;
+            cout << "Login Successful! Welcome, " << currentUser->username << " (" << currentUser->getRole() << ")" << endl;
+        } else {
+            cout << "Login Failed." << endl;
+        }
+    }
+
+
+    void registerAdmin() {
+        // This function is now redundant, as admin registration is part of registerUser
+        cout << "Admin registration is now part of the regular registration process." << endl;
+    }
+    // Function to list registered users
+    void listRegisteredUsers() const {
+        vector<UserData> users = loadUsers();
+        if (users.empty()) {
+            cout << "No users registered yet." << endl;
+            return;
+        }
+
+        cout << "\n--- Registered Users ---" << endl;
+        for (const auto& user : users) {
+            cout << "Username: " << user.username << ", Role: " << user.role << endl;
+        }
+    }
+
+    void logout() {
         delete currentUser;
         currentUser = nullptr;
+        cout << "Logged out." << endl;
     }
 
-    bool isAvailable(const string& date, const string& time) const {
-        for (const auto& booking : bookings) {
-            if (booking.date == date && booking.time == time) {
-                return false;
-            }
+    // Check if a user has permission to perform an action
+    bool hasPermission(const string& action) const {
+        if (!currentUser) {
+            cout << "Not logged in." << endl;
+            return false;
         }
-        return true;
+        if (action == "book") return currentUser->canBook();
+        if (action == "cancel") return currentUser->canCancel();
+        if (action == "list") return currentUser->canList();
+        if (action == "isAdmin") return currentUser->isAdmin(); // Check admin status
+        return false; // Unknown action or no permission
     }
 
-    User* authenticateUser(const string& username, const string& password) {
-        if (username == "artist" && password == "artistpass") {
-            return new Artist(username);
-        } else if (username == "producer" && password == "producerpass") {
-            return new Producer(username);
-        } else if (username == "engineer" && password == "engineerpass") {
-            return new Engineer(username);
-        }
-        return nullptr;
+    User* getCurrentUser() const {
+        return currentUser;
     }
 
-    friend void bookSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time);
-    friend void cancelSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time);
-    friend void listBookings(const StudioScheduler& scheduler);
-    friend void login(StudioScheduler& scheduler);
+    ~AccessControlManager() {
+        delete currentUser;
+    }
 };
 
-void bookSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time) {
-    if (scheduler.currentUser == nullptr || !scheduler.currentUser->canBook()) {
-        cout << "Error: You do not have permission to book sessions." << endl;
-        return;
-    }
-
-    double rate = scheduler.isWeekend(date) ? 15.0 : 10.0;
-    double hours = scheduler.getHoursFromTime(time);
-    double price = hours * rate;
-
-    if (scheduler.isAvailable(date, time)) {
-        scheduler.bookings.push_back({artist, date, time, price});
-        scheduler.saveToFile();
-        cout << "Booking confirmed for " << artist << " on " << date << " at " << time << ". Total Cost: $" << fixed << setprecision(2) << price << endl;
-
-        cout << "Already booked slots for " << artist << ":" << endl;
-        for (const auto& booking : scheduler.bookings) {
-            if (booking.artist == artist) {
-                cout << booking.date << " at " << booking.time << " - Cost: $" << fixed << setprecision(2) << booking.price << endl;
-            }
-        }
-    } else {
-        cout << "Error: Time slot already booked!" << endl;
-        auto nextSlot = scheduler.findNextAvailableSlot(date, time);
-        if (!nextSlot.first.empty()) {
-            cout << "Next available slot is on " << nextSlot.first << " at " << nextSlot.second << endl;
-        } else {
-            cout << "No other slots available" << endl;
-        }
-    }
-}
-
-void cancelSession(StudioScheduler& scheduler, const string& artist, const string& date, const string& time) {
-    if (scheduler.currentUser == nullptr || !scheduler.currentUser->canCancel()) {
-        cout << "Error: You do not have permission to cancel sessions." << endl;
-        return;
-    }
-    auto it = remove_if(scheduler.bookings.begin(), scheduler.bookings.end(),
-                       [&](const StudioScheduler::Booking& booking) {
-                           return booking.artist == artist && booking.date == date && booking.time == time;
-                       });
-
-    if (it != scheduler.bookings.end()) {
-        scheduler.bookings.erase(it, scheduler.bookings.end());
-        scheduler.saveToFile();
-        cout << "Session canceled for " << artist << " on " << date << " at " << time << endl;
-    } else {
-        cout << "Error: No matching booking found!" << endl;
-    }
-}
-
-void listBookings(const StudioScheduler& scheduler) {
-    if (scheduler.currentUser == nullptr || !scheduler.currentUser->canList()) {
-        cout << "Error: You do not have permission to list bookings." << endl;
-        return;
-    }
-    if (scheduler.bookings.empty()) {
-        cout << "No bookings available." << endl;
-        return;
-    }
-
-    cout << "\nCurrent Studio Bookings:\n";
-    for (const auto& booking : scheduler.bookings) {
-        cout << "Artist: " << booking.artist << " | Date: " << booking.date << " | Time: " << booking.time << " | Cost: $" << fixed << setprecision(2) << booking.price << endl;
-    }
-}
-
-void login(StudioScheduler& scheduler) {
-    string username, password;
-    cout << "\n--- Login ---" << endl;
-    cout << "Enter Username: ";
-    cin >> username;
-    cout << "Enter Password: ";
-    cin >> password;
-
-    User* user = scheduler.authenticateUser(username, password);
-    if (user) {
-        if (scheduler.currentUser != nullptr) {  // Check before deletion to avoid double deletion
-            delete scheduler.currentUser;        // Delete old user only if it exists
-        }
-        scheduler.currentUser = user;            // Assign new user
-        cout << "Login Successful! Welcome, " << scheduler.currentUser->username << " (" << scheduler.currentUser->getRole() << ")" << endl;
-    } else {
-        cout << "Login Failed. Invalid username or password." << endl;
-    }
-}
-
+// --- Menu and Main Function ---
 int displayMenu() {
     int choice;
     cout << "\n🎵 Studio Booking System 🎵" << endl;
@@ -312,41 +334,44 @@ void getBookingDetails(string& artist, string& date, string& time) {
 }
 
 int main() {
-    StudioScheduler scheduler;
+    AccessControlManager accessControl;  // Create Access Control Manager
+    //StudioScheduler scheduler(accessControl); // Pass accessControl to StudioScheduler
     int choice;
     string artist, date, time;
+    // Removed Booking
 
-    login(scheduler);
-    if (scheduler.currentUser == nullptr) {
-        cout << "Exiting, as no user is logged in." << endl;
-        return 1;
-    }
-
+    // Login or Register
+    int authChoice;
     do {
-        cout << "\nLogged in as: " << scheduler.currentUser->username << " (" << scheduler.currentUser->getRole() << ")";
-        choice = displayMenu();
+        cout << "\n--- Main Menu ---" << endl;
+        cout << "1. Sign Up" << endl;
+        cout << "2. Login" << endl;
+        cout << "3. Exit" << endl;
+        cout << "Enter choice: ";
+        cin >> authChoice;
 
-        switch (choice) {
-            case 1:
-                getBookingDetails(artist, date, time);
-                bookSession(scheduler, artist, date, time);
+        switch (authChoice) {
+            case 1: // Sign Up
+                accessControl.registerUser(); // Call the registerUser function
                 break;
             case 2:
-                getBookingDetails(artist, date, time);
-                cancelSession(scheduler, artist, date, time);
+                accessControl.login();
                 break;
             case 3:
-                listBookings(scheduler);
-                break;
-            case 4:
-                cout << "Exiting Studio Booking System. Goodbye!" << endl;
-                break;
+                cout << "Exiting..." << endl;
+                return 0; // Exit the program
             default:
-                cout << "Invalid choice. Please try again." << endl;
+                cout << "Invalid choice." << endl;
         }
-    } while (choice != 4);
+    } while (authChoice != 2 && accessControl.getCurrentUser() == nullptr && authChoice != 3); // Continue if not logged in or exit chosen
 
-    delete scheduler.currentUser;  // Still valid as final cleanup
+    if (!accessControl.getCurrentUser()) {
+        cout << "Exiting." << endl;
+        return 1; // Exit if no user is logged in
+    }
+
+    // Removed rest of code as per request, now only shows the authentication.
+    cout << "\nLogged in as: " << accessControl.getCurrentUser()->username << " (" << accessControl.getCurrentUser()->getRole() << ")" << endl;
 
     return 0;
 }

@@ -1,24 +1,28 @@
-#include <iostream>
-#include <vector>
-#include <string>
-#include <algorithm>
-#include <stdexcept>
-#include <map> // For a more organized plugin suggestion system
+#include <iostream> // Include for standard input/output operations (e.g., cout, cin)
+#include <vector>  // Include for using dynamic arrays (vectors)
+#include <string>  // Include for using strings
+#include <algorithm> // Include for using algorithms like `transform` (for lowercasing)
+#include <stdexcept> // Include for exception handling (e.g., `invalid_argument`)
+#include <map>       // Include for using maps (key-value pairs) - used for plugin suggestions
 
-using namespace std;
+using namespace std; // Use the standard namespace to avoid repeatedly typing std::
 
+// --- Plugin Structure ---
+
+// Structure to represent a plugin.  Holds information about a single plugin.
 struct Plugin {
-    string name;
-    string description;
-    string author;
-    string category;
+    string name;          // Plugin's name (e.g., "FabFilter Pro-Q 3")
+    string description;   // Brief description of the plugin's function
+    string author;        // The plugin's author or developer
+    string category;      // The plugin's category (e.g., "EQ", "Reverb")
 };
 
+// --- Plugin Manager Class ---
 class PluginManager {
 private:
-    vector<Plugin> plugins;
+    vector<Plugin> plugins; // Vector to store all the Plugin objects. This is the list of plugins.
 
-    // A map to link functionalities to plugin names (for suggestions)
+    // A map to link functionalities (keywords) to plugin names (for suggestions).
     map<string, vector<string>> functionalityToPlugins = {
         {"EQ", {"FabFilter Pro-Q 3", "SSL Native X-EQ 2", "Maag EQ4"}},
         {"Compression", {"FabFilter Pro-C 2", "Waves CLA-76", "Tube-Tech CL 1B", "OTT (Xfer Records)"}},
@@ -47,7 +51,7 @@ private:
     };
 
 public:
-    // Constructor - Adds the predefined plugins
+    // Constructor - Adds the predefined plugins.
     PluginManager() {
         //  1. Instruments
         addPlugin("Serum (Xfer Records)", "Wavetable synthesizer", "Xfer Records", "Synthesizer");
@@ -107,89 +111,91 @@ public:
 
     // Changed addPlugin to take all Plugin members as arguments, which solves the error
     void addPlugin(const string& pluginName, const string& description, const string& author, const string& category) {
+        // This add plugin functionality is redundant with the automatic initialization of plugins.
+        // It's left here for compatibility, but will not be used.  You can remove it.
+        // This is now used only for adding the plugins that have been created
         Plugin newPlugin{pluginName, description, author, category};
         plugins.push_back(newPlugin);
         cout << "\n✅ Plugin '" << pluginName << "' added successfully!" << endl;
     }
 
+    // Function to list the available plugins
     void listPlugins() {
         if (plugins.empty()) {
-            cout << "\n⚠️ No plugins available." << endl;
-            return;
+            cout << "\n⚠️ No plugins available." << endl;  // Display a message if there are no plugins to list
+            return; // Exit the function if there are no plugins
         }
-        cout << "\n🎛️ Available Plugins:\n";
-        for (size_t i = 0; i < plugins.size(); ++i) {
-            cout << i + 1 << ". " << plugins.at(i).name << endl;
-            cout << "   Description: " << plugins.at(i).description << endl;
-            cout << "   Author: " << plugins.at(i).author << endl;
-            cout << "   Category: " << plugins.at(i).category << endl;
+        cout << "\n🎛️ Available Plugins:\n"; // Print the header for listing the plugins
+        for (size_t i = 0; i < plugins.size(); ++i) {  // Loop through the plugins vector
+            cout << i + 1 << ". " << plugins.at(i).name << endl; // Print the plugin name with an index
+            cout << "   Description: " << plugins.at(i).description << endl; // Print the plugin's description
+            cout << "   Author: " << plugins.at(i).author << endl; // Print the plugin's author
+            cout << "   Category: " << plugins.at(i).category << endl; // Print the plugin's category
         }
     }
 
+    // Function to suggest plugins based on a user's description of their needs
     void suggestPlugins(const string& userNeed) {
-        cout << "\nAnalyzing your needs..." << endl;
+        cout << "\nAnalyzing your needs..." << endl; // Inform the user that the system is analyzing
         string lowerNeed = userNeed;
-        transform(lowerNeed.begin(), lowerNeed.end(), lowerNeed.begin(), ::tolower);
+        transform(lowerNeed.begin(), lowerNeed.end(), lowerNeed.begin(), ::tolower); // Convert the user's input to lowercase for case-insensitive matching
 
-        vector<string> suggestions;
-        for (const auto& [functionality, pluginNames] : functionalityToPlugins) {
+        vector<string> suggestions; // Vector to store suggested plugin names
+        for (const auto& [functionality, pluginNames] : functionalityToPlugins) { // Loop through the functionalityToPlugins map
             string lowerFunctionality = functionality;
-            transform(lowerFunctionality.begin(), lowerFunctionality.end(), lowerFunctionality.begin(), ::tolower);
-            if (lowerNeed.find(lowerFunctionality) != string::npos) {
-                suggestions.insert(suggestions.end(), pluginNames.begin(), pluginNames.end());
+            transform(lowerFunctionality.begin(), lowerFunctionality.end(), lowerFunctionality.begin(), ::tolower); // Convert the functionality keyword to lowercase
+            if (lowerNeed.find(lowerFunctionality) != string::npos) { // Check if the user's need contains the functionality keyword
+                suggestions.insert(suggestions.end(), pluginNames.begin(), pluginNames.end()); // Add the plugin names associated with the functionality to suggestions
             }
         }
 
-        if (suggestions.empty()) {
-            cout << "No matching plugins found based on your description." << endl;
-            return;
+        if (suggestions.empty()) { // If no suggestions were found
+            cout << "No matching plugins found based on your description." << endl; // Print a message
+            return; // Exit the function
         }
 
-        cout << "Based on your needs, you might consider these plugins:" << endl;
-        for (const string& pluginName : suggestions) {
-            cout << " - " << pluginName << endl;
+        cout << "Based on your needs, you might consider these plugins:" << endl; // Print a header for the suggested plugins
+        for (const string& pluginName : suggestions) { // Loop through the suggestions
+            cout << " - " << pluginName << endl; // Print each suggested plugin
         }
     }
 };
 
+// --- Menu and Main Function ---
 int displayMenu() {
     int choice;
     cout << "\n🎵 Plugin Manager Menu 🎵" << endl;
-    cout << "1.List Plugins" << endl;
-    cout << "2.Suggest Plugin" << endl;
-    cout << "3.Exit" << endl;
+    cout << "1️⃣ List Plugins" << endl;
+    cout << "2️⃣ Suggest Plugin" << endl;
+    cout << "3️⃣ Exit" << endl;
     cout << "Enter your choice: ";
-    cin >> choice;
-    return choice;
+    cin >> choice; // Get user's menu choice
+    return choice; // Return the choice
 }
 
 int main() {
-    PluginManager manager;
-    string pluginName;
-    int choice;
+    PluginManager manager;  // Create an instance of the PluginManager class
+    string pluginName; // Stores the plugin name
+    int choice;      // Stores the user's menu choice
 
-    while (true) {
-        choice = displayMenu();
+    while (true) { // Main program loop - continues until the user chooses to exit
+        choice = displayMenu(); // Display the menu and get the user's choice
 
-        switch (choice) {
+        switch (choice) { // Process user's choice using a switch statement
             case 1:
-                // Manual addition is disabled, handled in the constructor
-                cout << "Adding plugins manually is disabled. Please select Suggest Plugin or Exit." << endl;
+                manager.listPlugins(); // Call the listPlugins() method to display plugins
                 break;
             case 2:
-                manager.listPlugins();
+                cin.ignore(); // Consume the newline character left in the input buffer
+                cout << "Enter the reason why you need a plugin: "; // Prompt the user to enter the reason
+                getline(cin, pluginName); // Read the user's need (can include spaces)
+                manager.suggestPlugins(pluginName); // Call the suggestPlugins() method to provide plugin suggestions
                 break;
             case 3:
-                cin.ignore(); // Consume the newline
-                cout << "Enter the reason why you need a plugin: ";
-                getline(cin, pluginName);
-                manager.suggestPlugins(pluginName);
-                break;
-            case 4:
-                cout << "\n Exiting Plugin Manager...\n";
-                return 0;
+                cout << "\n👋 Exiting Plugin Manager...\n"; // Display exit message
+                return 0; // Exit the program with a success code
             default:
-                cout << "Invalid choice. Please try again." << endl;
+                cout << "Invalid choice. Please try again." << endl; // Handle invalid menu choices
         }
     }
 }
